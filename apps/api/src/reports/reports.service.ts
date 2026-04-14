@@ -2,6 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { CalculationResult } from '../calculator/calculator.service';
 
+// Strip Romanian diacritics so pdf-lib standard fonts (WinAnsi) can encode them
+const ro = (s: string) =>
+  s.replace(/[ăâ]/g, 'a').replace(/[ÂĂ]/g, 'A')
+   .replace(/î/g, 'i').replace(/Î/g, 'I')
+   .replace(/[șş]/g, 's').replace(/[ȘŞ]/g, 'S')
+   .replace(/[țţ]/g, 't').replace(/[ȚŢ]/g, 'T');
+
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
@@ -31,15 +38,15 @@ export class ReportsService {
       x: 40, y: height - 45,
       font: fontBold, size: 22, color: accentGreen,
     });
-    page.drawText('Priminvestnord SRL — Graf de Rambursare', {
+    page.drawText('Priminvestnord SRL -- Graf de Rambursare', {
       x: 40, y: height - 65,
       font: fontReg, size: 10, color: white,
     });
-    page.drawText(`Partener: ${partnerName}`, {
+    page.drawText(ro(`Partener: ${partnerName}`), {
       x: 40, y: height - 82,
       font: fontReg, size: 9, color: lightGray,
     });
-    page.drawText(new Date().toLocaleDateString('ro-MD'), {
+    page.drawText(new Date().toLocaleDateString('en-GB'), {
       x: width - 120, y: height - 82,
       font: fontReg, size: 9, color: lightGray,
     });
@@ -52,7 +59,7 @@ export class ReportsService {
       ['Tip Credit', calc.creditType === 'ZERO' ? 'Credit Zero (0%)' : 'Credit Clasic'],
       ['Suma', `${calc.amount.toLocaleString('ro-MD')} MDL`],
       ['Termen', `${calc.months} luni`],
-      ['Rată lunară', `${calc.monthlyPayment.toLocaleString('ro-MD')} MDL`],
+      ['Rata lunara', `${calc.monthlyPayment.toLocaleString('ro-MD')} MDL`],
       ['VTP', `${calc.totalAmount.toLocaleString('ro-MD')} MDL`],
       ['DAE', `${calc.dae}%`],
     ];
@@ -71,10 +78,10 @@ export class ReportsService {
     const tableTop = boxY - 30;
     const cols = [
       { label: 'Luna', x: 35, w: 40, align: 'center' },
-      { label: 'Rată Lunară', x: 80, w: 95, align: 'right' },
+      { label: 'Rata Lunara', x: 80, w: 95, align: 'right' },
       { label: 'Principal', x: 180, w: 90, align: 'right' },
-      { label: 'Dobândă', x: 275, w: 80, align: 'right' },
-      { label: 'Sold Rămas', x: 360, w: 100, align: 'right' },
+      { label: 'Dobanda', x: 275, w: 80, align: 'right' },
+      { label: 'Sold Ramas', x: 360, w: 100, align: 'right' },
     ];
 
     page.drawRectangle({ x: 30, y: tableTop - 6, width: width - 60, height: 18, color: darkBg });
@@ -128,11 +135,11 @@ export class ReportsService {
     // ── Footer ────────────────────────────────────────────────────
     const lastPage = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
     lastPage.drawLine({ start: { x: 30, y: 45 }, end: { x: width - 30, y: 45 }, thickness: 0.5, color: lightGray });
-    lastPage.drawText('Elaborat de @Bajerean Ion — Ionix Partner Platform', {
+    lastPage.drawText('Elaborat de @Bajerean Ion -- Ionix Partner Platform', {
       x: 30, y: 32,
       font: fontReg, size: 7, color: darkGray,
     });
-    lastPage.drawText('Document generat automat. Nu are valoare juridică fără semnătura unui reprezentant autorizat.', {
+    lastPage.drawText('Document generat automat. Nu are valoare juridica fara semnatura unui reprezentant autorizat.', {
       x: 30, y: 22,
       font: fontReg, size: 6.5, color: darkGray,
     });
