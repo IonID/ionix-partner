@@ -38,7 +38,7 @@ export class ReportsService {
       x: 40, y: height - 45,
       font: fontBold, size: 22, color: accentGreen,
     });
-    page.drawText('Priminvestnord SRL -- Graf de Rambursare', {
+    page.drawText('Priminvestnord SRL - Graf de Rambursare', {
       x: 40, y: height - 65,
       font: fontReg, size: 10, color: white,
     });

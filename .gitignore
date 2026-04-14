@@ -47,6 +47,9 @@ desktop.ini
 # Prisma migrations lock (keep migrations, exclude shadow db artifacts)
 prisma/.migration-lock.toml
 
+# Duplicate local migration (identical to 20260414061907_init on GitHub)
+apps/api/prisma/migrations/20260414045531_init/
+
 # Docker volumes (local only)
 postgres_data/
 redis_data/

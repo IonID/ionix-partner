@@ -8,10 +8,12 @@ import { CreditType } from '@prisma/client';
 export class CreateApplicationDto {
   // ── Client data ──────────────────────────────────────────────────
   @ApiProperty({ example: 'Ion' })
-  @IsString() clientFirstName: string;
+  @IsString()
+  clientFirstName: string;
 
   @ApiProperty({ example: 'Popescu' })
-  @IsString() clientLastName: string;
+  @IsString()
+  clientLastName: string;
 
   @ApiProperty({ example: '2001234567890', description: 'IDNP — 13 cifre' })
   @IsString()
