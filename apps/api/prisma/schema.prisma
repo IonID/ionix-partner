@@ -1,0 +1,216 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  Ionix Partner — Prisma Schema
+//  Database: PostgreSQL 16
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+//  Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PARTNER
+}
+
+enum ApplicationStatus {
+  PENDING      // freshly submitted
+  PROCESSING   // operator picked it up
+  APPROVED     // credit approved
+  REJECTED     // credit rejected
+  CANCELLED    // partner cancelled
+}
+
+enum CreditType {
+  ZERO    // 0% interest — marketing product
+  CLASSIC // standard amortization
+}
+
+enum DocumentType {
+  ID_FRONT
+  ID_BACK
+  SELFIE
+  OTHER
+}
+
+// ─────────────────────────────────────────────
+//  User
+// ─────────────────────────────────────────────
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String   // bcrypt hash — NEVER store plaintext
+  firstName  String
+  lastName   String
+  role       Role     @default(PARTNER)
+  isActive   Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  partner    Partner?
+  auditLogs  AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+//  Refresh Token (rotation strategy)
+// ─────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  ipAddress String?
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+//  Partner (extends User for PARTNER role)
+// ─────────────────────────────────────────────
+
+model Partner {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName    String
+  commissionRate Float    @default(0.0)  // percentage 0–100
+
+  // Customizable calculator config (stored as JSON for flexibility)
+  // Example: { "allowedCreditTypes": ["ZERO","CLASSIC"], "maxAmount": 50000, ... }
+  calculatorConfig Json?
+
+  applications   Application[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("partners")
+}
+
+// ─────────────────────────────────────────────
+//  Application (credit request)
+// ─────────────────────────────────────────────
+
+model Application {
+  id           String   @id @default(cuid())
+  partnerId    String
+  partner      Partner  @relation(fields: [partnerId], references: [id])
+
+  // ── Client personal data ────────────────────
+  clientFirstName  String
+  clientLastName   String
+  clientIdnp       String             // MD national ID number
+  clientPhone      String
+  clientEmail      String?
+  clientAddress    String?
+
+  // ── Credit parameters ───────────────────────
+  creditType    CreditType
+  amount        Decimal    @db.Decimal(12, 2)
+  months        Int
+  monthlyRate   Decimal?   @db.Decimal(6, 4)  // decimal rate, e.g. 0.0299
+
+  // ── Calculated snapshot (persisted at submit time) ──────
+  monthlyPayment Decimal   @db.Decimal(12, 2)
+  totalAmount    Decimal   @db.Decimal(12, 2)  // VTP
+  dae            Decimal   @db.Decimal(6, 2)   // Annual Effective Rate %
+  commissionAmount Decimal @db.Decimal(12, 2) @default(0)
+
+  // ── Lifecycle ────────────────────────────────
+  status               ApplicationStatus @default(PENDING)
+  telegramMessageId    String?
+  processorNotes       String?
+  rejectionReason      String?
+
+  documents    Document[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("applications")
+}
+
+// ─────────────────────────────────────────────
+//  Document (uploaded files)
+// ─────────────────────────────────────────────
+
+model Document {
+  id            String       @id @default(cuid())
+  applicationId String
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  type          DocumentType @default(OTHER)
+  filename      String       // stored filename (UUID-based)
+  originalName  String       // original filename from client
+  mimeType      String
+  sizeBytes     Int
+  path          String       // relative path under /uploads
+
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────
+//  AuditLog (immutable event trail)
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action      String   // e.g. LOGIN, CALCULATE, SUBMIT_APPLICATION, DOWNLOAD_PDF
+  resource    String?  // e.g. application, calculator, user
+  resourceId  String?
+  ipAddress   String
+  userAgent   String?
+  metadata    Json?    // any extra structured data
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+//  Setting (key-value store for global config)
+// ─────────────────────────────────────────────
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique  // e.g. CLASSIC_MONTHLY_RATE, MAX_AMOUNT_ZERO
+  value       String            // always stored as string, parsed by service
+  type        String   @default("string")  // string | number | boolean | json
+  label       String?           // human-readable label for admin UI
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@map("settings")
+}

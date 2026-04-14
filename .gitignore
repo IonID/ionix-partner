@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/web/.env.local
+
+# Prisma generated client
+apps/api/node_modules/
+
+# Uploads (user files)
+apps/api/uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Prisma migrations lock (keep migrations, exclude shadow db artifacts)
+prisma/.migration-lock.toml
+
+# Docker volumes (local only)
+postgres_data/
+redis_data/

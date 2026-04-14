@@ -1,0 +1,23 @@
+version: '3.9'
+
+# Production overrides — use with:
+# docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    build:
+      target: production
+    environment:
+      NODE_ENV: production
+    volumes:
+      - uploads_data:/app/uploads
+    # Remove source-code bind mount in production
+    command: node dist/main
+
+  web:
+    build:
+      target: production
+    environment:
+      NODE_ENV: production
+    volumes: []
+    command: node server.js
