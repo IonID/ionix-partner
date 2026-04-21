@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import TelegramBot = require('node-telegram-bot-api');
 import * as fs from 'fs';
@@ -29,10 +30,27 @@ interface ApplicationInfo {
 }
 
 @Injectable()
-export class TelegramService {
+export class TelegramService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TelegramService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  onApplicationBootstrap() {
+    const baseUrl = this.config.get<string>('NGROK_BASE_URL');
+    if (!baseUrl) return;
+    // Delay 12s to give ngrok time to establish tunnel before registering
+    setTimeout(() => {
+      this.registerAllWebhooks(baseUrl)
+        .then(({ registered, failed }) => {
+          if (registered > 0) this.logger.log(`Auto-registered ${registered} Telegram webhook(s)`);
+          if (failed > 0) this.logger.warn(`Failed to auto-register ${failed} webhook(s)`);
+        })
+        .catch((err) => this.logger.warn(`Auto-register webhooks skipped: ${err.message}`));
+    }, 12000);
+  }
 
   // ── Config helpers ────────────────────────────────────────────────
 
@@ -320,6 +338,26 @@ export class TelegramService {
       allowed_updates: ['message', 'callback_query'],
     });
     this.logger.log(`Webhook set for bot ...${token.slice(-6)} → ${webhookUrl}`);
+  }
+
+  async registerPartnerWebhook(partnerId: string, baseUrl: string): Promise<{ ok: boolean; message: string }> {
+    const partner = await this.prisma.partner.findUnique({
+      where: { id: partnerId },
+      select: { telegramBotToken: true, telegramEnabled: true },
+    });
+    if (!partner?.telegramBotToken) {
+      return { ok: false, message: 'Partner has no bot token configured' };
+    }
+    if (!partner.telegramEnabled) {
+      return { ok: false, message: 'Telegram is disabled for this partner' };
+    }
+    try {
+      const url = `${baseUrl}/api/v1/telegram/webhook/${encodeURIComponent(partner.telegramBotToken)}`;
+      await this.registerWebhook(partner.telegramBotToken, url);
+      return { ok: true, message: `Webhook registered → ${url}` };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
   }
 
   async registerAllWebhooks(baseUrl: string): Promise<{ registered: number; failed: number }> {

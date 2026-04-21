@@ -1,4 +1,5 @@
 import { Controller, Post, Param, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { TelegramService } from './telegram.service';
@@ -9,7 +10,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @ApiTags('Telegram')
 @Controller('telegram')
 export class TelegramController {
-  constructor(private readonly telegramService: TelegramService) {}
+  constructor(
+    private readonly telegramService: TelegramService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Post('webhook/:token')
   @HttpCode(HttpStatus.OK)
@@ -24,7 +28,21 @@ export class TelegramController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: '[ADMIN] Register Telegram webhooks for all enabled partners' })
-  registerWebhooks(@Body() body: { baseUrl: string }) {
-    return this.telegramService.registerAllWebhooks(body.baseUrl);
+  registerWebhooks(@Body() body: { baseUrl?: string }) {
+    const baseUrl = body.baseUrl ?? this.config.get<string>('NGROK_BASE_URL') ?? '';
+    return this.telegramService.registerAllWebhooks(baseUrl);
+  }
+
+  @Post('register-webhook/:partnerId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '[ADMIN] Register Telegram webhook for a specific partner' })
+  async registerPartnerWebhook(
+    @Param('partnerId') partnerId: string,
+    @Body() body: { baseUrl?: string },
+  ) {
+    const baseUrl = body.baseUrl ?? this.config.get<string>('NGROK_BASE_URL') ?? '';
+    return this.telegramService.registerPartnerWebhook(partnerId, baseUrl);
   }
 }

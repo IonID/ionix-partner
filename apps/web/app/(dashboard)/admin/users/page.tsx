@@ -71,12 +71,30 @@ function TelegramConfig({ partner }: { partner: PartnerData }) {
     telegramChatId: partner.telegramChatId ?? '',
     telegramEnabled: partner.telegramEnabled,
   });
+  const [regLoading, setRegLoading] = useState(false);
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () => api.patch(`/users/partners/${partner.id}/telegram`, form),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Telegram salvat!' }); setOpen(false); },
     onError: (err: any) => toast({ title: 'Eroare', description: err?.response?.data?.message, variant: 'destructive' }),
   });
+
+  const registerWebhook = async () => {
+    setRegLoading(true);
+    try {
+      const res = await api.post(`/telegram/register-webhook/${partner.id}`, {});
+      const data = res.data?.data ?? res.data;
+      if (data?.ok) {
+        toast({ title: '✅ Webhook înregistrat!', description: data.message });
+      } else {
+        toast({ title: 'Eroare webhook', description: data?.message ?? 'Necunoscut', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Eroare', description: err?.response?.data?.message ?? 'Nu s-a putut înregistra webhook-ul', variant: 'destructive' });
+    } finally {
+      setRegLoading(false);
+    }
+  };
 
   const hasConfig = !!(partner.telegramBotToken && partner.telegramChatId);
 
@@ -122,11 +140,19 @@ function TelegramConfig({ partner }: { partner: PartnerData }) {
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${form.telegramEnabled ? 'translate-x-4' : ''}`} />
                 </button>
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
                 <button onClick={() => save()} disabled={isPending} className="btn-primary py-1 px-3 text-xs">
                   {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                   Salvează
                 </button>
+                {hasConfig && (
+                  <button onClick={registerWebhook} disabled={regLoading}
+                    className="btn-ghost py-1 px-3 text-xs border border-blue-500/30 text-blue-400/80 hover:text-blue-400 hover:border-blue-500/60"
+                    title="Re-înregistrează webhook-ul Telegram">
+                    {regLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Webhook
+                  </button>
+                )}
                 <button onClick={() => setOpen(false)} className="btn-ghost py-1 px-2 text-xs">Anulează</button>
               </div>
             </div>
