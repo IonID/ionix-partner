@@ -289,15 +289,13 @@ export default function CalculatorPage() {
                       {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                       Descarcă PDF
                     </button>
-                    {user?.role !== 'MANAGER' && (
-                      <a
-                        href={`/applications/new?amount=${result.amount}&months=${result.months}&creditType=${result.creditType}`}
-                        className="btn-primary flex-1"
-                      >
-                        <Send className="w-4 h-4" />
-                        Depune Cerere
-                      </a>
-                    )}
+                    <a
+                      href={`/applications/new?amount=${result.amount}&months=${result.months}&creditType=${result.creditType}`}
+                      className="btn-primary flex-1"
+                    >
+                      <Send className="w-4 h-4" />
+                      Depune Cerere
+                    </a>
                   </div>
                 </div>
 
