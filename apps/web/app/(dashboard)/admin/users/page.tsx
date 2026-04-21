@@ -200,17 +200,19 @@ function PartnerCard({ owner, partner, onToggle, onDelete, onAddUser }: {
     <div className="glass-card overflow-hidden">
       {/* Header partener */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-        <button onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <LogoUpload partner={partner} />
-          <div className="flex-1">
-            <div className="font-semibold text-white">{partner.companyName}</div>
-            <div className="text-xs text-white/35">
-              {partner.users.length} utilizator{partner.users.length !== 1 ? 'i' : ''}
+          <button onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-white truncate">{partner.companyName}</div>
+              <div className="text-xs text-white/35">
+                {partner.users.length} utilizator{partner.users.length !== 1 ? 'i' : ''}
+              </div>
             </div>
-          </div>
-          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-        </button>
+            <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
         <div className="flex items-center gap-1 ml-3">
           <TelegramConfig partner={partner} />
           <button onClick={() => onAddUser(partner.id, partner.companyName)}
