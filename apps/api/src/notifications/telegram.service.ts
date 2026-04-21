@@ -334,10 +334,23 @@ export class TelegramService implements OnApplicationBootstrap {
 
   async registerWebhook(token: string, webhookUrl: string): Promise<void> {
     const bot = new TelegramBot(token, { polling: false });
-    await (bot as any).setWebHook(webhookUrl, {
-      allowed_updates: ['message', 'callback_query'],
-    });
-    this.logger.log(`Webhook set for bot ...${token.slice(-6)} → ${webhookUrl}`);
+    try {
+      await (bot as any).setWebHook(webhookUrl, {
+        allowed_updates: ['message', 'callback_query'],
+      });
+      this.logger.log(`Webhook set for bot ...${token.slice(-6)} → ${webhookUrl}`);
+    } catch (err: any) {
+      if (err?.message?.includes('429')) {
+        // Rate-limited — wait 1s and retry once
+        await new Promise((r) => setTimeout(r, 1200));
+        await (bot as any).setWebHook(webhookUrl, {
+          allowed_updates: ['message', 'callback_query'],
+        });
+        this.logger.log(`Webhook set (retry) for bot ...${token.slice(-6)} → ${webhookUrl}`);
+      } else {
+        throw err;
+      }
+    }
   }
 
   async registerPartnerWebhook(partnerId: string, baseUrl: string): Promise<{ ok: boolean; message: string }> {
