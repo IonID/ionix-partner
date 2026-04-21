@@ -169,7 +169,10 @@ export class ApplicationsService {
   }
 
   async cancel(id: string, requestingUser: any) {
-    const application = await this.prisma.application.findUnique({ where: { id } });
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { partner: { select: { telegramBotToken: true, telegramChatId: true, telegramEnabled: true } } },
+    });
 
     if (!application) throw new NotFoundException('Cererea nu a fost găsită');
 
@@ -179,10 +182,18 @@ export class ApplicationsService {
 
     await this.assertPartnerAccess(application, requestingUser, 'anula');
 
-    return this.prisma.application.update({
+    const updated = await this.prisma.application.update({
       where: { id },
       data: { status: 'CANCELLED', statusChangedByName: `${requestingUser.firstName} ${requestingUser.lastName}` },
     });
+
+    await this.telegram.sendStatusUpdate(id, 'CANCELLED', undefined, {
+      token:   application.partner.telegramBotToken ?? undefined,
+      chatId:  application.partner.telegramChatId   ?? undefined,
+      enabled: application.partner.telegramEnabled,
+    });
+
+    return updated;
   }
 
   async resubmit(id: string, requestingUser: any) {
