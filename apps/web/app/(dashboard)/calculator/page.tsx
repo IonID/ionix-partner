@@ -23,11 +23,12 @@ interface CalcResult {
   dae: number;
   processingFee: number;
   commissionAmount: number;
+  zeroCommission?: number;
   schedule: Array<{ month: number; payment: number; principal: number; interest: number; balance: number }>;
 }
 
-const ZERO_MONTHS  = [3, 6, 9, 12];
-const CLASS_MONTHS = [3, 6, 9, 12, 15, 18, 24];
+const ZERO_MONTHS  = [3, 6, 9, 12, 18, 24];
+const CLASS_MONTHS = [3, 6, 12, 18, 24, 36, 48];
 
 export default function CalculatorPage() {
   const { user } = useAuth();
@@ -41,8 +42,10 @@ export default function CalculatorPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const availableMonths = creditType === 'ZERO' ? ZERO_MONTHS : CLASS_MONTHS;
-  const minAmount = creditType === 'ZERO' ? 500  : 1000;
-  const maxAmount = creditType === 'ZERO' ? 10000 : 50000;
+  const minAmount  = creditType === 'ZERO' ? 500   : 1000;
+  const maxAmount  = creditType === 'ZERO' ? 10000 : 100000;
+  const minMonths  = 3;
+  const maxMonths  = creditType === 'ZERO' ? 24 : 50;
 
   const handleCreditTypeChange = (type: CreditType) => {
     setCreditType(type);
@@ -163,12 +166,12 @@ export default function CalculatorPage() {
                 <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Termen (luni)</label>
                 <span className="text-sm font-bold text-brand-400">{months} luni</span>
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap mb-2">
                 {availableMonths.map((m) => (
                   <motion.button
                     key={m}
                     onClick={() => { setMonths(m); setResult(null); }}
-                    className={`flex-1 min-w-[48px] py-2 rounded-lg text-sm font-medium border transition-all ${
+                    className={`flex-1 min-w-[44px] py-2 rounded-lg text-sm font-medium border transition-all ${
                       months === m
                         ? 'bg-brand-500/20 border-brand-500/50 text-brand-400'
                         : 'bg-white/5 border-white/10 text-white/50 hover:border-white/20 hover:text-white/80'
@@ -179,6 +182,19 @@ export default function CalculatorPage() {
                   </motion.button>
                 ))}
               </div>
+              <input
+                type="number"
+                value={months}
+                min={minMonths}
+                max={maxMonths}
+                onChange={(e) => {
+                  const v = Math.max(minMonths, Math.min(maxMonths, Number(e.target.value)));
+                  setMonths(v);
+                  setResult(null);
+                }}
+                className="ionix-input font-mono text-center text-sm"
+                placeholder={`${minMonths}–${maxMonths} luni`}
+              />
             </div>
 
             {/* Calculate button */}
@@ -248,11 +264,18 @@ export default function CalculatorPage() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: 'DAE',           value: `${result.dae}%`,           icon: TrendingUp },
-                      { label: 'Dobândă totală', value: formatMDL(result.totalInterest), icon: TrendingUp },
-                      { label: 'Comision proc.', value: formatMDL(result.processingFee), icon: TrendingUp },
-                    ].map(({ label, value }) => (
+                    {(result.creditType === 'ZERO'
+                      ? [
+                          { label: 'DAE',                  value: '0%' },
+                          { label: 'Dobândă totală',        value: formatMDL(0) },
+                          { label: 'Dobândă Compensată',    value: formatMDL(result.zeroCommission ?? 0) },
+                        ]
+                      : [
+                          { label: 'DAE',                  value: `${result.dae}%` },
+                          { label: 'Dobândă totală',        value: formatMDL(result.totalInterest) },
+                          { label: 'Comision administrare', value: formatMDL(result.processingFee) },
+                        ]
+                    ).map(({ label, value }) => (
                       <div key={label} className="rounded-lg p-3 bg-white/4 border border-white/8 text-center">
                         <p className="text-xs text-white/35">{label}</p>
                         <p className="text-sm font-semibold text-white mt-0.5">{value}</p>
@@ -266,10 +289,15 @@ export default function CalculatorPage() {
                       {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                       Descarcă PDF
                     </button>
-                    <a href="/applications/new" className="btn-primary flex-1">
-                      <Send className="w-4 h-4" />
-                      Depune Cerere
-                    </a>
+                    {user?.role !== 'MANAGER' && (
+                      <a
+                        href={`/applications/new?amount=${result.amount}&months=${result.months}&creditType=${result.creditType}`}
+                        className="btn-primary flex-1"
+                      >
+                        <Send className="w-4 h-4" />
+                        Depune Cerere
+                      </a>
+                    )}
                   </div>
                 </div>
 

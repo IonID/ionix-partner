@@ -1,37 +1,36 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { User, Phone, Mail, CreditCard, Upload, Send, Loader2, ArrowLeft, ImageIcon, X } from 'lucide-react';
+import {
+  User, Phone, Upload, Send, Loader2, ArrowLeft,
+  ImageIcon, ShoppingBag, Lock, Calculator,
+} from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { formatMDL } from '@/lib/utils';
 
 const schema = z.object({
   clientFirstName: z.string().min(2, 'Prenumele este obligatoriu'),
   clientLastName:  z.string().min(2, 'Numele este obligatoriu'),
-  clientIdnp:      z.string().length(13, 'IDNP trebuie să aibă exact 13 cifre').regex(/^\d+$/, 'IDNP conține doar cifre'),
   clientPhone:     z.string().min(8, 'Telefonul este obligatoriu'),
-  clientEmail:     z.string().email('Email invalid').optional().or(z.literal('')),
-  clientAddress:   z.string().optional(),
-  creditType:      z.enum(['ZERO', 'CLASSIC']),
-  amount:          z.number().positive().max(100000),
-  months:          z.number().int().min(1).max(60),
+  clientProduct:   z.string().min(2, 'Denumirea produsului este obligatorie'),
 });
 type FormData = z.infer<typeof schema>;
 
-function FileUploadZone({ label, name, preview, onChange }: { label: string; name: string; preview: string | null; onChange: (f: File) => void }) {
+function FileUploadZone({ label, preview, onChange }: { label: string; preview: string | null; onChange: (f: File) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div
       onClick={() => ref.current?.click()}
       className="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/15 bg-white/3 hover:border-brand-500/40 hover:bg-brand-500/5 cursor-pointer transition-all p-4 min-h-[120px]"
     >
-      <input ref={ref} type="file" name={name} accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && onChange(e.target.files[0])} />
+      <input ref={ref} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && onChange(e.target.files[0])} />
       {preview ? (
         <img src={preview} alt={label} className="max-h-24 rounded-lg object-cover" />
       ) : (
@@ -47,20 +46,35 @@ function FileUploadZone({ label, name, preview, onChange }: { label: string; nam
 
 export default function NewApplicationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [files, setFiles] = useState<{ idFront?: File; idBack?: File; selfie?: File }>({});
   const [previews, setPreviews] = useState<{ idFront?: string; idBack?: string; selfie?: string }>({});
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
+  // Credit params passed from Calculator — required to reach this page
+  const paramAmount     = searchParams.get('amount');
+  const paramMonths     = searchParams.get('months');
+  const paramCreditType = searchParams.get('creditType');
+  const hasCalcData     = !!(paramAmount && paramMonths && paramCreditType);
+
+  // Redirect to calculator if accessed without data
+  if (!hasCalcData) {
+    router.replace('/calculator');
+    return null;
+  }
+
+  const amount     = Number(paramAmount);
+  const months     = Number(paramMonths);
+  const creditType = paramCreditType as 'ZERO' | 'CLASSIC';
+
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { creditType: 'CLASSIC', amount: 5000, months: 12 },
   });
 
   const setFile = (field: 'idFront' | 'idBack' | 'selfie', file: File) => {
     setFiles((p) => ({ ...p, [field]: file }));
-    const url = URL.createObjectURL(file);
-    setPreviews((p) => ({ ...p, [field]: url }));
+    setPreviews((p) => ({ ...p, [field]: URL.createObjectURL(file) }));
   };
 
   const onSubmit = async (data: FormData) => {
@@ -71,13 +85,18 @@ export default function NewApplicationPage() {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      Object.entries(data).forEach(([k, v]) => formData.append(k, String(v)));
+      formData.append('clientFirstName', data.clientFirstName);
+      formData.append('clientLastName',  data.clientLastName);
+      formData.append('clientPhone',     data.clientPhone);
+      formData.append('clientProduct',   data.clientProduct);
+      formData.append('creditType',      creditType);
+      formData.append('amount',          String(amount));
+      formData.append('months',          String(months));
       if (files.idFront) formData.append('idFront', files.idFront);
       if (files.idBack)  formData.append('idBack',  files.idBack);
       if (files.selfie)  formData.append('selfie',  files.selfie);
 
-      await api.post('/applications', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-
+      await api.post('/applications', formData);
       toast({ title: 'Cerere trimisă!', description: 'Cererea a fost transmisă cu succes.' });
       router.push('/applications');
     } catch (err: any) {
@@ -89,10 +108,10 @@ export default function NewApplicationPage() {
 
   return (
     <div className="p-6 space-y-5 animate-fade-in">
-      <Header title="Cerere Nouă de Credit" subtitle="Completați datele clientului și alegeți tipul creditului" />
+      <Header title="Cerere Nouă de Credit" subtitle="Completați datele clientului" />
 
       <button onClick={() => router.back()} className="btn-ghost text-sm">
-        <ArrowLeft className="w-4 h-4" /> Înapoi
+        <ArrowLeft className="w-4 h-4" /> Înapoi la Calculator
       </button>
 
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -113,14 +132,6 @@ export default function NewApplicationPage() {
                 <input {...register('clientLastName')} placeholder="Popescu" className="ionix-input" />
                 {errors.clientLastName && <p className="text-xs text-red-400">{errors.clientLastName.message}</p>}
               </div>
-              <div className="space-y-1.5 col-span-2">
-                <label className="text-xs text-white/50">IDNP *</label>
-                <div className="relative">
-                  <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                  <input {...register('clientIdnp')} placeholder="2001234567890" className="ionix-input pl-9 font-mono" maxLength={13} />
-                </div>
-                {errors.clientIdnp && <p className="text-xs text-red-400">{errors.clientIdnp.message}</p>}
-              </div>
               <div className="space-y-1.5">
                 <label className="text-xs text-white/50">Telefon *</label>
                 <div className="relative">
@@ -130,15 +141,12 @@ export default function NewApplicationPage() {
                 {errors.clientPhone && <p className="text-xs text-red-400">{errors.clientPhone.message}</p>}
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-white/50">Email (opțional)</label>
+                <label className="text-xs text-white/50">Denumire Produs *</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                  <input {...register('clientEmail')} placeholder="client@exemplu.md" className="ionix-input pl-9" />
+                  <ShoppingBag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                  <input {...register('clientProduct')} placeholder="ex: Laptop Lenovo" className="ionix-input pl-9" />
                 </div>
-              </div>
-              <div className="space-y-1.5 col-span-2">
-                <label className="text-xs text-white/50">Adresă (opțional)</label>
-                <input {...register('clientAddress')} placeholder="Chișinău, str. Exemplu 1" className="ionix-input" />
+                {errors.clientProduct && <p className="text-xs text-red-400">{errors.clientProduct.message}</p>}
               </div>
             </div>
           </div>
@@ -149,65 +157,49 @@ export default function NewApplicationPage() {
               <Upload className="w-4 h-4 text-brand-400" /> Documente Client
             </h2>
             <div className="grid grid-cols-3 gap-3">
-              <FileUploadZone label="Față buletin *" name="idFront" preview={previews.idFront ?? null} onChange={(f) => setFile('idFront', f)} />
-              <FileUploadZone label="Verso buletin" name="idBack" preview={previews.idBack ?? null} onChange={(f) => setFile('idBack', f)} />
-              <FileUploadZone label="Selfie cu buletinul" name="selfie" preview={previews.selfie ?? null} onChange={(f) => setFile('selfie', f)} />
+              <FileUploadZone label="Față buletin *" preview={previews.idFront ?? null} onChange={(f) => setFile('idFront', f)} />
+              <FileUploadZone label="Verso buletin"  preview={previews.idBack  ?? null} onChange={(f) => setFile('idBack',  f)} />
+              <FileUploadZone label="Selfie cu buletinul" preview={previews.selfie ?? null} onChange={(f) => setFile('selfie', f)} />
             </div>
             <p className="text-xs text-white/25 mt-2">Format acceptat: JPEG, PNG, PDF. Max 10 MB per fișier.</p>
           </div>
         </div>
 
-        {/* ── Credit parameters ─────────────────────────────── */}
+        {/* ── Credit params (read-only from Calculator) ─────── */}
         <div className="space-y-5">
           <div className="glass-card p-6">
-            <h2 className="text-sm font-semibold text-white mb-4">Parametri Credit</h2>
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="w-3.5 h-3.5 text-white/40" />
+              <h2 className="text-sm font-semibold text-white">Parametri Credit</h2>
+            </div>
+            <p className="text-xs text-white/35 mb-4">
+              Valorile preluate din Calculator. Pentru modificare,{' '}
+              <a href="/calculator" className="text-brand-400 hover:underline">revino la Calculator</a>.
+            </p>
 
-            <div className="space-y-4">
-              {/* Credit type */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-white/50">Tip Credit</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['ZERO', 'CLASSIC'] as const).map((t) => (
-                    <button
-                      key={t} type="button"
-                      onClick={() => setValue('creditType', t)}
-                      className={`py-2.5 rounded-lg text-xs font-semibold border transition-all ${
-                        watch('creditType') === t
-                          ? 'bg-brand-500/15 border-brand-500/40 text-brand-400'
-                          : 'bg-white/5 border-white/10 text-white/50 hover:border-white/20'
-                      }`}
-                    >
-                      {t === 'ZERO' ? '🟢 Credit Zero' : '🔵 Credit Clasic'}
-                    </button>
-                  ))}
-                </div>
+            <div className="space-y-3">
+              <div className="rounded-lg bg-white/4 border border-white/8 px-4 py-3">
+                <p className="text-[10px] text-white/35 uppercase tracking-wider mb-1">Tip Credit</p>
+                <p className="text-sm font-semibold text-white">
+                  {creditType === 'ZERO' ? '🟢 Credit Zero' : '🔵 Credit Clasic'}
+                </p>
               </div>
-
-              {/* Amount */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-white/50">Suma (MDL)</label>
-                <input
-                  type="number"
-                  {...register('amount', { valueAsNumber: true })}
-                  className="ionix-input font-mono text-right"
-                  min={500} max={50000} step={500}
-                />
-                {errors.amount && <p className="text-xs text-red-400">{errors.amount.message}</p>}
+              <div className="rounded-lg bg-white/4 border border-white/8 px-4 py-3">
+                <p className="text-[10px] text-white/35 uppercase tracking-wider mb-1">Suma</p>
+                <p className="text-base font-semibold font-mono text-brand-400">{formatMDL(amount)}</p>
               </div>
-
-              {/* Months */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-white/50">Termen (luni)</label>
-                <select {...register('months', { valueAsNumber: true })} className="ionix-input">
-                  {[3, 6, 9, 12, 15, 18, 24].map((m) => (
-                    <option key={m} value={m}>{m} luni</option>
-                  ))}
-                </select>
+              <div className="rounded-lg bg-white/4 border border-white/8 px-4 py-3">
+                <p className="text-[10px] text-white/35 uppercase tracking-wider mb-1">Termen</p>
+                <p className="text-base font-semibold font-mono text-white">{months} luni</p>
               </div>
             </div>
+
+            <a href="/calculator" className="btn-ghost w-full mt-4 text-sm border border-white/10 hover:border-brand-500/30">
+              <Calculator className="w-4 h-4" />
+              Modifică în Calculator
+            </a>
           </div>
 
-          {/* Submit */}
           <motion.button
             type="submit"
             disabled={submitting}
@@ -220,10 +212,6 @@ export default function NewApplicationPage() {
               <><Send className="w-4 h-4" /> Trimite Cererea</>
             )}
           </motion.button>
-
-          <p className="text-xs text-white/25 text-center">
-            Cererea va fi transmisă automat operatorilor prin Telegram
-          </p>
         </div>
       </form>
     </div>

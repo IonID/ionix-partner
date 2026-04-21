@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- White fill + green border circle -->
+  <circle cx="200" cy="200" r="185" fill="white"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#2A9348" stroke-width="26"/>
+
+  <!-- Cactus silhouette — outline only -->
+  <path fill="none" stroke="#1a1a1a" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"
+    d="M 138,222
+       L 138,204 L 127,196 L 140,188
+       L 129,176 L 141,169
+       L 150,157 L 145,145 L 155,140
+       L 160,128 L 152,115 L 161,111
+       L 168,100 L 161,88  L 170,84
+       L 174,97  L 180,83  L 185,97
+       L 189,80  L 193,91  L 197,74
+       L 200,85
+       L 203,74  L 207,91  L 211,80
+       L 215,97  L 220,83  L 226,97
+       L 230,84  L 239,88  L 232,100
+       L 239,111 L 248,115 L 240,128
+       L 245,140 L 255,145 L 250,157
+       L 259,169 L 271,176 L 260,188
+       L 273,196 L 262,204
+       L 262,222 Z"/>
+
+  <!-- Horizontal ground line -->
+  <line x1="72" y1="222" x2="328" y2="222" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- CACTUS text -->
+  <text x="200" y="308"
+    text-anchor="middle"
+    font-family="'Arial Black', 'Arial Bold', Arial, sans-serif"
+    font-weight="900"
+    font-size="60"
+    letter-spacing="2"
+    fill="#1a1a1a">CACTUS</text>
+</svg>

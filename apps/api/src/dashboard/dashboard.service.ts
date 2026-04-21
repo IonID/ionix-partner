@@ -58,9 +58,11 @@ export class DashboardService {
 
   // ── Partner Dashboard ───────────────────────────────────────────
   private async getPartnerStats(user: any) {
-    const partner = await this.prisma.partner.findUnique({
-      where: { userId: user.id },
+    const userWithPartner = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { partner: true },
     });
+    const partner = userWithPartner?.partner ?? null;
     if (!partner) return null;
 
     const now = new Date();

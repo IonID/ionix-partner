@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <clipPath id="circ">
+      <circle cx="200" cy="200" r="190"/>
+    </clipPath>
+  </defs>
+
+  <!-- Outer thin white ring -->
+  <circle cx="200" cy="200" r="195" fill="white"/>
+  <!-- Black filled circle -->
+  <circle cx="200" cy="200" r="190" fill="#0d0d0d"/>
+  <!-- Inner thin white ring -->
+  <circle cx="200" cy="200" r="183" fill="none" stroke="white" stroke-width="2"/>
+
+  <!-- "ios" large text (white) -->
+  <!-- Leaf replacing dot on "i": positioned above the "i" in "ios" -->
+  <!-- With font-size=115, text-anchor=middle at x=200, "ios" starts ~x=108 -->
+  <!-- "i" occupies roughly x=108–148, center x≈128, dot area y≈88 -->
+  <ellipse cx="126" cy="84" rx="9" ry="16" fill="white" transform="rotate(-30,126,84)"/>
+
+  <text x="200" y="230"
+    text-anchor="middle"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-weight="700"
+    font-size="115"
+    fill="white">ios</text>
+
+  <!-- "Store" text (white) -->
+  <text x="200" y="295"
+    text-anchor="middle"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-weight="700"
+    font-size="62"
+    fill="white">Store</text>
+
+  <!-- White separator lines -->
+  <line x1="25" y1="314" x2="375" y2="314" stroke="white" stroke-width="2.5" clip-path="url(#circ)"/>
+  <line x1="25" y1="322" x2="375" y2="322" stroke="white" stroke-width="1"   clip-path="url(#circ)"/>
+
+  <!-- "TELEFOANE & ACCESORII" -->
+  <text x="200" y="358"
+    text-anchor="middle"
+    font-family="'Arial Black', Arial, sans-serif"
+    font-weight="900"
+    font-size="22"
+    letter-spacing="1"
+    fill="white">TELEFOANE &amp; ACCESORII</text>
+</svg>

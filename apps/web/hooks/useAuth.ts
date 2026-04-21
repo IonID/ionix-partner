@@ -5,11 +5,12 @@ import { api, setCookieValue, deleteCookie } from '@/lib/api';
 
 interface User {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   firstName: string;
   lastName: string;
-  role: 'ADMIN' | 'PARTNER';
-  partner?: { id: string; companyName: string; commissionRate: number } | null;
+  role: 'ADMIN' | 'VIEWER' | 'PARTNER_ADMIN' | 'PARTNER' | 'MANAGER';
+  partner?: { id: string; companyName: string; logoPath: string | null } | null;
 }
 
 let globalUser: User | null = null;
@@ -30,10 +31,10 @@ export function useAuth() {
   }, []);
 
   // ── Login ──────────────────────────────────────────────────────
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (credential: string, password: string) => {
     setLoading(true);
     try {
-      const { data } = await api.post('/auth/login', { email, password });
+      const { data } = await api.post('/auth/login', { credential, password });
       const { accessToken, user: u } = data.data;
 
       setCookieValue('accessToken', accessToken, 15);

@@ -1,38 +1,30 @@
 import {
-  IsString, IsEmail, IsOptional, IsEnum,
-  IsNumber, IsPositive, IsInt, Min, Max, Length,
+  IsString, IsEnum, IsNumber, IsPositive, IsInt, Min, Max, MinLength,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { CreditType } from '@prisma/client';
 
 export class CreateApplicationDto {
-  // ── Client data ──────────────────────────────────────────────────
   @ApiProperty({ example: 'Ion' })
-  @IsString() clientFirstName: string;
+  @IsString()
+  @MinLength(2)
+  clientFirstName: string;
 
   @ApiProperty({ example: 'Popescu' })
-  @IsString() clientLastName: string;
-
-  @ApiProperty({ example: '2001234567890', description: 'IDNP — 13 cifre' })
   @IsString()
-  @Length(13, 13, { message: 'IDNP trebuie să aibă exact 13 cifre' })
-  clientIdnp: string;
+  @MinLength(2)
+  clientLastName: string;
 
   @ApiProperty({ example: '+37369000000' })
   @IsString()
+  @MinLength(8)
   clientPhone: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsEmail()
-  clientEmail?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ example: 'Laptop Lenovo IdeaPad', description: 'Produsul pe care îl cumpără clientul' })
   @IsString()
-  clientAddress?: string;
+  @MinLength(2)
+  clientProduct: string;
 
-  // ── Credit parameters ────────────────────────────────────────────
   @ApiProperty({ enum: CreditType })
   @IsEnum(CreditType)
   creditType: CreditType;

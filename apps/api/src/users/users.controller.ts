@@ -1,8 +1,10 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param,
-  UseGuards, HttpCode, HttpStatus,
+  UseGuards, HttpCode, HttpStatus, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -44,6 +46,28 @@ export class UsersController {
   @ApiOperation({ summary: '[ADMIN] Actualizează utilizator' })
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
+  }
+
+  @Patch('partners/:partnerId/telegram')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: '[ADMIN] Configurează Telegram per partener' })
+  updatePartnerTelegram(
+    @Param('partnerId') partnerId: string,
+    @Body() body: { telegramBotToken?: string; telegramChatId?: string; telegramEnabled?: boolean },
+  ) {
+    return this.usersService.updatePartnerTelegram(partnerId, body);
+  }
+
+  @Post('partners/:partnerId/logo')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: '[ADMIN] Încarcă logo partener (PNG/SVG, max 2 MB)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('logo', { storage: memoryStorage() }))
+  uploadLogo(
+    @Param('partnerId') partnerId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.usersService.uploadLogo(partnerId, file);
   }
 
   @Delete(':id')

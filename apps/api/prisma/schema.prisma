@@ -17,8 +17,11 @@ datasource db {
 // ─────────────────────────────────────────────
 
 enum Role {
-  ADMIN
-  PARTNER
+  ADMIN         // system superadmin — acces complet
+  VIEWER        // system observer — doar vizualizare, fără acțiuni
+  PARTNER_ADMIN // primul utilizator al unui Partener — admin la nivel de firmă
+  PARTNER       // păstrat pentru compatibilitate (tratat ca PARTNER_ADMIN)
+  MANAGER       // utilizator partener — poate depune + vedea toate + anulează doar ale sale
 }
 
 enum ApplicationStatus {
@@ -46,22 +49,27 @@ enum DocumentType {
 // ─────────────────────────────────────────────
 
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  password   String   // bcrypt hash — NEVER store plaintext
-  firstName  String
-  lastName   String
-  role       Role     @default(PARTNER)
-  isActive   Boolean  @default(true)
+  id          String    @id @default(cuid())
+  email       String?   @unique   // required for ADMIN/VIEWER; optional for parteneri
+  username    String?   @unique   // login pentru conturi de Partener
+  password    String              // bcrypt hash — NEVER store plaintext
+  firstName   String
+  lastName    String
+  role        Role      @default(MANAGER)
+  isActive    Boolean   @default(true)
   lastLoginAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  partner    Partner?
-  auditLogs  AuditLog[]
+  partnerId   String?
+  partner     Partner?  @relation(fields: [partnerId], references: [id])
+  auditLogs   AuditLog[]
   refreshTokens RefreshToken[]
+  createdApplications        Application[] @relation("CreatedApplications")
 
   @@index([email])
+  @@index([username])
+  @@index([partnerId])
   @@map("users")
 }
 
@@ -90,16 +98,19 @@ model RefreshToken {
 
 model Partner {
   id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   companyName    String
-  commissionRate Float    @default(0.0)  // percentage 0–100
+  commissionRate Float    @default(0.0)
+  logoPath       String?  // relative path under /uploads/logos/
 
-  // Customizable calculator config (stored as JSON for flexibility)
-  // Example: { "allowedCreditTypes": ["ZERO","CLASSIC"], "maxAmount": 50000, ... }
   calculatorConfig Json?
 
+  // Per-partner Telegram (overrides global settings)
+  telegramBotToken  String?
+  telegramChatId    String?
+  telegramEnabled   Boolean @default(true)
+
+  users          User[]
   applications   Application[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -115,6 +126,11 @@ model Application {
   id           String   @id @default(cuid())
   partnerId    String
   partner      Partner  @relation(fields: [partnerId], references: [id])
+
+  createdByUserId      String?
+  createdByUser        User?   @relation("CreatedApplications", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  statusChangedByName  String?   // name of whoever last changed the status (web user or Telegram operator)
 
   // ── Client personal data ────────────────────
   clientFirstName  String

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
+import { PartnerAvatar } from '@/components/PartnerAvatar';
 
 const partnerNav = [
   { href: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard'   },
@@ -42,37 +44,41 @@ export function Sidebar() {
 
       <div className="flex flex-col h-full relative z-10">
         {/* ── Logo ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/8">
-          <div className="w-8 h-8 rounded-lg bg-brand-500/20 border border-brand-500/30 flex items-center justify-center flex-shrink-0">
-            <span className="text-brand-400 font-bold text-base">I</span>
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-white truncate">Ionix Partner</div>
-            <div className="text-[10px] text-white/35 truncate">Priminvestnord SRL</div>
-          </div>
+        <div className="flex items-center px-5 py-4 border-b border-white/8">
+          <Image
+            src="/icon.svg"
+            alt="Ionix Partner"
+            width={48}
+            height={48}
+            className="w-12 h-12"
+            priority
+          />
         </div>
 
         {/* ── User info ──────────────────────────────────────── */}
         {user && (
-          <div className="mx-3 mt-4 mb-2 rounded-lg p-3 bg-brand-500/8 border border-brand-500/15">
+          <div className="mx-3 mt-4 mb-2 rounded-lg p-3 bg-white/5 border border-white/8">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-brand-500/25 flex items-center justify-center flex-shrink-0">
-                <span className="text-brand-400 font-semibold text-xs">
-                  {user.firstName?.[0]}{user.lastName?.[0]}
-                </span>
-              </div>
+              <PartnerAvatar
+                logoPath={(user as any).partner?.logoPath}
+                companyName={user.partner?.companyName}
+                size="sm"
+              />
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-white truncate">
                   {user.firstName} {user.lastName}
                 </div>
                 {user.partner?.companyName && (
                   <div className="flex items-center gap-1">
-                    <Building2 className="w-2.5 h-2.5 text-brand-400/70" />
-                    <span className="text-[10px] text-brand-400/70 truncate">{user.partner.companyName}</span>
+                    <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                    <span className="text-[10px] text-slate-400 truncate">{user.partner.companyName}</span>
                   </div>
                 )}
                 {user.role === 'ADMIN' && (
-                  <span className="text-[10px] text-brand-400/80 font-medium">Administrator</span>
+                  <span className="text-[10px] text-blue-400/80 font-medium">Administrator</span>
+                )}
+                {user.role === 'MANAGER' && (
+                  <span className="text-[10px] text-purple-400/80 font-medium">Manager</span>
                 )}
               </div>
             </div>

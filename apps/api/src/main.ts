@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
+import * as express from 'express';
+import * as path from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -40,6 +42,13 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
+
+  // ── Public static: partner logos only (documents stay authenticated) ──
+  const uploadDir = configService.get<string>('UPLOAD_DIR', './uploads');
+  app.use('/uploads/logos', express.static(path.resolve(uploadDir, 'logos'), {
+    maxAge: '7d',
+    immutable: false,
+  }));
 
   // ── API prefix ───────────────────────────────────────────────────
   app.setGlobalPrefix('api/v1');

@@ -7,7 +7,6 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -25,7 +24,11 @@ export class AuthService {
 
   // ── Login ─────────────────────────────────────────────────────────
   async login(dto: LoginDto, ipAddress: string) {
-    const user = await this.usersService.findByEmail(dto.email);
+    // Email contains '@' → system user (ADMIN/VIEWER); altfel → username partener
+    const isEmail = dto.credential.includes('@');
+    const user = isEmail
+      ? await this.usersService.findByEmail(dto.credential)
+      : await this.usersService.findByUsername(dto.credential);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Credențiale invalide');
@@ -36,30 +39,29 @@ export class AuthService {
       throw new UnauthorizedException('Credențiale invalide');
     }
 
-    // Update last login
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
-
-    // Store refresh token (rotation)
+    const identity = user.email ?? user.username ?? user.id;
+    const tokens = await this.generateTokens(user.id, identity, user.role);
     await this.storeRefreshToken(user.id, tokens.refreshToken, ipAddress);
 
-    this.logger.log(`User ${user.email} logged in from ${ipAddress}`);
+    this.logger.log(`User ${identity} logged in from ${ipAddress}`);
 
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: {
-        id: user.id,
-        email: user.email,
+        id:        user.id,
+        email:     user.email    ?? null,
+        username:  user.username ?? null,
         firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        partner: user.partner
-          ? { id: user.partner.id, companyName: user.partner.companyName }
+        lastName:  user.lastName,
+        role:      user.role,
+        partner:   user.partner
+          ? { id: user.partner.id, companyName: user.partner.companyName, logoPath: user.partner.logoPath ?? null }
           : null,
       },
     };
@@ -85,18 +87,13 @@ export class AuthService {
       throw new ForbiddenException('Token de refresh invalid sau expirat');
     }
 
-    // Revoke old token (rotation)
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
 
-    const tokens = await this.generateTokens(
-      stored.user.id,
-      stored.user.email,
-      stored.user.role,
-    );
-
+    const identity = stored.user.email ?? stored.user.username ?? stored.user.id;
+    const tokens = await this.generateTokens(stored.user.id, identity, stored.user.role);
     await this.storeRefreshToken(stored.user.id, tokens.refreshToken, ipAddress);
 
     return tokens;
@@ -111,16 +108,16 @@ export class AuthService {
   }
 
   // ── Private helpers ───────────────────────────────────────────────
-  private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  private async generateTokens(userId: string, identity: string, role: string) {
+    const payload = { sub: userId, identity, role };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.config.getOrThrow('JWT_ACCESS_SECRET'),
+        secret:    this.config.getOrThrow('JWT_ACCESS_SECRET'),
         expiresIn: this.config.get('JWT_ACCESS_EXPIRY', '15m'),
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
+        secret:    this.config.getOrThrow('JWT_REFRESH_SECRET'),
         expiresIn: this.config.get('JWT_REFRESH_EXPIRY', '7d'),
       }),
     ]);
@@ -129,15 +126,13 @@ export class AuthService {
   }
 
   private async storeRefreshToken(userId: string, token: string, ipAddress: string) {
-    const expiryDays = 7;
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expiryDays);
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     await this.prisma.refreshToken.create({
       data: { token, userId, expiresAt, ipAddress },
     });
 
-    // Clean up old revoked tokens for this user (keep DB clean)
     await this.prisma.refreshToken.deleteMany({
       where: {
         userId,

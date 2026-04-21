@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 460" width="500" height="460">
+
+  <!-- Crown body (yellow) -->
+  <path fill="#F5D800" stroke="white" stroke-width="2.5" stroke-linejoin="round"
+    d="M 48,355
+       L 82,140
+       L 118,208
+       L 155,92
+       L 200,188
+       L 250,42
+       L 300,188
+       L 345,92
+       L 382,208
+       L 418,140
+       L 452,355
+       Z"/>
+
+  <!-- Internal divider lines (white) -->
+  <line x1="250" y1="355" x2="250" y2="42"  stroke="white" stroke-width="2.5"/>
+  <line x1="250" y1="355" x2="82"  y2="140" stroke="white" stroke-width="2"/>
+  <line x1="250" y1="355" x2="418" y2="140" stroke="white" stroke-width="2"/>
+  <line x1="250" y1="355" x2="155" y2="92"  stroke="white" stroke-width="1.5"/>
+  <line x1="250" y1="355" x2="345" y2="92"  stroke="white" stroke-width="1.5"/>
+  <line x1="118" y1="208" x2="200" y2="355" stroke="white" stroke-width="1.5"/>
+  <line x1="382" y1="208" x2="300" y2="355" stroke="white" stroke-width="1.5"/>
+
+  <!-- Red diamonds at each crown tip -->
+  <!-- Center tip (250, 42) -->
+  <polygon points="250,14 268,42 250,70 232,42" fill="#CC1515"/>
+  <!-- Inner-left tip (155, 92) -->
+  <polygon points="155,66 172,92 155,118 138,92" fill="#CC1515"/>
+  <!-- Inner-right tip (345, 92) -->
+  <polygon points="345,66 362,92 345,118 328,92" fill="#CC1515"/>
+  <!-- Outer-left tip (82, 140) -->
+  <polygon points="82,116 98,140 82,164 66,140"  fill="#CC1515"/>
+  <!-- Outer-right tip (418, 140) -->
+  <polygon points="418,116 434,140 418,164 402,140" fill="#CC1515"/>
+
+  <!-- "CoRonA" text — red with white outline -->
+  <text x="250" y="430"
+    text-anchor="middle"
+    font-family="'Arial Black', Impact, Arial, sans-serif"
+    font-weight="900"
+    font-size="90"
+    fill="#CC1515"
+    stroke="white"
+    stroke-width="8"
+    paint-order="stroke">CoRonA</text>
+</svg>

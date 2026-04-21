@@ -10,6 +10,10 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://api:4000'}/api/v1/:path*`,
       },
+      {
+        source: '/uploads-proxy/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://api:4000'}/uploads/:path*`,
+      },
     ];
   },
   async headers() {

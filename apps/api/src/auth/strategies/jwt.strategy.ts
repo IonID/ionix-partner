@@ -17,7 +17,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: { sub: string; email: string; role: string }) {
+  async validate(payload: { sub: string; identity: string; role: string }) {
     const user = await this.usersService.findById(payload.sub);
 
     if (!user || !user.isActive) {
@@ -25,13 +25,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
 
     return {
-      id: user.id,
-      email: user.email,
+      id:        user.id,
+      email:     user.email    ?? null,
+      username:  user.username ?? null,
       firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      partner: user.partner
-        ? { id: user.partner.id, companyName: user.partner.companyName, commissionRate: user.partner.commissionRate }
+      lastName:  user.lastName,
+      role:      user.role,
+      partnerId: user.partner?.id ?? null,
+      partner:   user.partner
+        ? { id: user.partner.id, companyName: user.partner.companyName, logoPath: user.partner.logoPath ?? null }
         : null,
     };
   }

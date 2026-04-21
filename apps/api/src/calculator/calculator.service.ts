@@ -4,25 +4,34 @@ import { CalculateDto } from './dto/calculate.dto';
 
 export interface AmortizationRow {
   month: number;
-  payment: number;       // total monthly payment
-  principal: number;     // principal component
-  interest: number;      // interest component
-  balance: number;       // remaining balance
+  payment: number;
+  principal: number;
+  interest: number;
+  balance: number;
 }
 
 export interface CalculationResult {
   creditType: string;
   amount: number;
   months: number;
-  monthlyRate: number;          // decimal form, e.g. 0.0299
+  monthlyRate: number;
   monthlyPayment: number;
-  totalAmount: number;          // VTP — Valoarea Totala de Plata
+  totalAmount: number;
   totalInterest: number;
-  dae: number;                  // DAE — Dobânda Anuală Efectivă (%)
+  dae: number;
   processingFee: number;
   commissionAmount: number;
+  zeroCommission?: number; // "Dobândă Compensată" — shown in UI for Zero, never in PDF
   schedule: AmortizationRow[];
 }
+
+// Fallback commission table: months → partner compensation %
+const ZERO_COMMISSION_FALLBACK: Record<number, number> = {
+  3: 4.0, 4: 5.0, 5: 6.0, 6: 7.0, 7: 8.0, 8: 9.0, 9: 10.0,
+  10: 11.0, 11: 12.0, 12: 13.0, 13: 14.0, 14: 14.5, 15: 15.0,
+  16: 16.0, 17: 17.0, 18: 18.0, 19: 19.0, 20: 20.0,
+  21: 21.0, 22: 21.5, 23: 22.0, 24: 22.5,
+};
 
 @Injectable()
 export class CalculatorService {
@@ -30,30 +39,23 @@ export class CalculatorService {
 
   async calculate(dto: CalculateDto, commissionRate: number): Promise<CalculationResult> {
     const { creditType, amount, months } = dto;
-
-    // ── Load settings from DB ──────────────────────────────────────
     const s = await this.settings.getAll();
-    const processingFeeRate = parseFloat(s['PROCESSING_FEE_RATE'] ?? '0.01');
-    const processingFee = amount * processingFeeRate;
 
-    if (creditType === 'ZERO') {
-      return this.calculateZero({ amount, months, processingFee, commissionRate, s });
-    } else {
-      return this.calculateClassic({ amount, months, processingFee, commissionRate, s });
-    }
+    return creditType === 'ZERO'
+      ? this.calculateZero({ amount, months, s })
+      : this.calculateClassic({ amount, months, commissionRate, s });
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  Credit Zero — 0% dobândă, rate egale
+  //  Credit Zero — rate egale, fără dobândă pentru client
+  //  Partner primește "Dobândă Compensată" din tabelul global
   // ─────────────────────────────────────────────────────────────────
-  private async calculateZero(params: {
+  private calculateZero(params: {
     amount: number;
     months: number;
-    processingFee: number;
-    commissionRate: number;
     s: Record<string, string>;
-  }): Promise<CalculationResult> {
-    const { amount, months, processingFee, commissionRate, s } = params;
+  }): CalculationResult {
+    const { amount, months, s } = params;
 
     const minAmount = parseFloat(s['ZERO_MIN_AMOUNT'] ?? '500');
     const maxAmount = parseFloat(s['ZERO_MAX_AMOUNT'] ?? '10000');
@@ -63,14 +65,11 @@ export class CalculatorService {
     this.validateRange(amount, minAmount, maxAmount, 'sumă', 'ZERO');
     this.validateRange(months, minMonths, maxMonths, 'termen', 'ZERO');
 
-    const monthlyPayment = this.round2(amount / months);
-    const totalAmount = this.round2(monthlyPayment * months + processingFee);
-    const totalInterest = 0;
-    const commissionAmount = this.round2(amount * commissionRate / 100);
+    const commissionTable = this.parseCommissionTable(s['ZERO_COMMISSION_TABLE']);
+    const commissionPct   = commissionTable[months] ?? 0;
+    const zeroCommission  = this.round2(amount * commissionPct / 100);
 
-    // DAE for zero-interest credit — only fee applies
-    // Using IRR Newton-Raphson for accuracy
-    const dae = this.round2(this.calculateDAE(amount, monthlyPayment, months, processingFee) * 100);
+    const monthlyPayment = this.round2(amount / months);
 
     const schedule: AmortizationRow[] = [];
     let balance = amount;
@@ -85,85 +84,90 @@ export class CalculatorService {
       amount, months,
       monthlyRate: 0,
       monthlyPayment,
-      totalAmount,
-      totalInterest,
-      dae,
-      processingFee: this.round2(processingFee),
-      commissionAmount,
+      totalAmount:    amount,  // client returns exactly what was borrowed
+      totalInterest:  0,
+      dae:            0,
+      processingFee:  0,
+      commissionAmount: zeroCommission,
+      zeroCommission,
       schedule,
     };
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  Credit Clasic — amortizare standard (anuitate)
+  //  Credit Clasic — anuitate + comision lunar de administrare
+  //  monthlyPayment = annuity(20%/an) + amount × 1%/lună
+  //  DAE calculat prin Newton-Raphson IRR
   // ─────────────────────────────────────────────────────────────────
-  private async calculateClassic(params: {
+  private calculateClassic(params: {
     amount: number;
     months: number;
-    processingFee: number;
     commissionRate: number;
     s: Record<string, string>;
-  }): Promise<CalculationResult> {
-    const { amount, months, processingFee, commissionRate, s } = params;
+  }): CalculationResult {
+    const { amount, months, commissionRate, s } = params;
 
-    const monthlyRate = parseFloat(s['CLASSIC_MONTHLY_RATE'] ?? '0.0299');
-    const minAmount = parseFloat(s['CLASSIC_MIN_AMOUNT'] ?? '1000');
-    const maxAmount = parseFloat(s['CLASSIC_MAX_AMOUNT'] ?? '50000');
-    const minMonths = parseInt(s['CLASSIC_MIN_MONTHS'] ?? '3');
-    const maxMonths = parseInt(s['CLASSIC_MAX_MONTHS'] ?? '24');
+    const annualRate   = parseFloat(s['CLASSIC_ANNUAL_RATE']    ?? '0.20');
+    const adminFeeRate = parseFloat(s['CLASSIC_ADMIN_FEE_RATE'] ?? '0.01');
+    const minAmount    = parseFloat(s['CLASSIC_MIN_AMOUNT']     ?? '1000');
+    const maxAmount    = parseFloat(s['CLASSIC_MAX_AMOUNT']     ?? '50000');
+    const minMonths    = parseInt(s['CLASSIC_MIN_MONTHS']       ?? '3');
+    const maxMonths    = parseInt(s['CLASSIC_MAX_MONTHS']       ?? '24');
 
     this.validateRange(amount, minAmount, maxAmount, 'sumă', 'CLASIC');
     this.validateRange(months, minMonths, maxMonths, 'termen', 'CLASIC');
 
-    // ── Annuity formula: P * [r(1+r)^n] / [(1+r)^n - 1] ──────────
-    const r = monthlyRate;
+    const r = annualRate / 12; // monthly interest rate
     const n = months;
     const factor = Math.pow(1 + r, n);
-    const monthlyPayment = this.round2((amount * r * factor) / (factor - 1));
 
-    const totalAmount = this.round2(monthlyPayment * months + processingFee);
-    const totalInterest = this.round2(totalAmount - amount - processingFee);
-    const commissionAmount = this.round2(amount * commissionRate / 100);
+    // Annuity component (principal + interest)
+    const annuityPayment  = this.round2((amount * r * factor) / (factor - 1));
+    // Monthly admin fee on original amount (charged each month)
+    const monthlyAdminFee = this.round2(amount * adminFeeRate);
+    // Total monthly payment client sees
+    const monthlyPayment  = this.round2(annuityPayment + monthlyAdminFee);
 
-    // DAE = (1 + r_monthly)^12 - 1  expressed as percentage
-    const dae = this.round2((Math.pow(1 + r, 12) - 1) * 100);
+    const totalAdminFees = this.round2(monthlyAdminFee * months);
+    const totalInterest  = this.round2(annuityPayment * months - amount);
+    const totalAmount    = this.round2(monthlyPayment * months);
+    const commissionAmount = this.round2(amount * commissionRate / 100 * months);
 
-    // ── Amortization schedule ──────────────────────────────────────
+    // DAE via Newton-Raphson: solve amount = Σ monthlyPayment/(1+r)^t
+    const dae = this.round2(this.calculateDAE(amount, monthlyPayment, months) * 100);
+
+    // Amortization schedule (annuity basis; admin fee included in payment column)
     const schedule: AmortizationRow[] = [];
     let balance = amount;
     for (let i = 1; i <= months; i++) {
-      const interest = this.round2(balance * r);
-      const principal = this.round2(monthlyPayment - interest);
+      const interest  = this.round2(balance * r);
+      const principal = this.round2(annuityPayment - interest);
       balance = this.round2(balance - principal);
-      if (i === months && Math.abs(balance) < 0.01) balance = 0; // fix floating point drift
+      if (i === months && Math.abs(balance) < 0.01) balance = 0;
       schedule.push({ month: i, payment: monthlyPayment, principal, interest, balance });
     }
 
     return {
       creditType: 'CLASSIC',
       amount, months,
-      monthlyRate,
+      monthlyRate: r,
       monthlyPayment,
       totalAmount,
       totalInterest,
       dae,
-      processingFee: this.round2(processingFee),
+      processingFee: totalAdminFees, // total admin fees over all months
       commissionAmount,
       schedule,
     };
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  DAE via Newton-Raphson (for zero-interest loan w/ fee)
-  //  Solves: amount = Σ payment/(1+r)^t for t=1..n, then DAE=(1+r)^12-1
+  //  Newton-Raphson IRR: solve PV = Σ payment/(1+r)^t → DAE=(1+r)^12-1
   // ─────────────────────────────────────────────────────────────────
-  private calculateDAE(principal: number, payment: number, months: number, fee: number): number {
-    if (fee === 0) return 0;
-    const totalPaid = payment * months + fee;
-    // Initial guess: simple approximation
-    let r = (totalPaid / principal - 1) / months;
-    for (let iter = 0; iter < 100; iter++) {
-      const f = this.npv(r, payment, months, principal);
+  private calculateDAE(principal: number, payment: number, months: number): number {
+    let r = 0.01; // initial guess ≈ 12% annual
+    for (let iter = 0; iter < 200; iter++) {
+      const f  = this.npv(r, payment, months, principal);
       const df = this.dnpv(r, payment, months);
       const delta = f / df;
       r -= delta;
@@ -187,6 +191,18 @@ export class CalculatorService {
   // ─────────────────────────────────────────────────────────────────
   //  Helpers
   // ─────────────────────────────────────────────────────────────────
+  private parseCommissionTable(raw?: string): Record<number, number> {
+    if (!raw) return ZERO_COMMISSION_FALLBACK;
+    try {
+      const parsed = JSON.parse(raw);
+      return Object.fromEntries(
+        Object.entries(parsed).map(([k, v]) => [Number(k), Number(v)]),
+      );
+    } catch {
+      return ZERO_COMMISSION_FALLBACK;
+    }
+  }
+
   private round2(n: number): number {
     return Math.round(n * 100) / 100;
   }
