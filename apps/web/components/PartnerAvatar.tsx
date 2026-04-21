@@ -33,9 +33,11 @@ export function PartnerAvatar({
           alt={companyName ?? 'Logo partener'}
           className="w-full h-full object-contain p-0.5"
           onError={(e) => {
-            // Fall back to placeholder on broken image
-            (e.target as HTMLImageElement).style.display = 'none';
-            (e.target as HTMLImageElement).parentElement!.innerHTML = fallbackHtml(companyName);
+            const img = e.target as HTMLImageElement;
+            img.style.display = 'none';
+            if (img.parentElement) {
+              img.parentElement.innerHTML = fallbackHtml(companyName);
+            }
           }}
         />
       </div>
