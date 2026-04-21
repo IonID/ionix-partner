@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, UserCheck, UserX, Loader2, Upload,
-  Users, ShieldCheck, Eye, Send,
+  Users, ShieldCheck, Eye, Send, ChevronDown,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { PartnerAvatar } from '@/components/PartnerAvatar';
@@ -168,20 +168,24 @@ function PartnerCard({ owner, partner, onToggle, onDelete, onAddUser }: {
   onDelete: (id: string) => void;
   onAddUser: (partnerId: string, partnerName: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="glass-card overflow-hidden">
       {/* Header partener */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-        <div className="flex items-center gap-3">
+        <button onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">
           <LogoUpload partner={partner} />
-          <div>
+          <div className="flex-1">
             <div className="font-semibold text-white">{partner.companyName}</div>
             <div className="text-xs text-white/35">
               {partner.users.length} utilizator{partner.users.length !== 1 ? 'i' : ''}
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
+          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+        <div className="flex items-center gap-1 ml-3">
           <TelegramConfig partner={partner} />
           <button onClick={() => onAddUser(partner.id, partner.companyName)}
             className="btn-ghost px-2 py-1.5 text-blue-400/70 hover:text-blue-400" title="Adaugă utilizator">
@@ -194,7 +198,16 @@ function PartnerCard({ owner, partner, onToggle, onDelete, onAddUser }: {
         </div>
       </div>
 
-      {/* Lista utilizatori */}
+      {/* Lista utilizatori — accordion */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
       <div className="divide-y divide-white/5">
         {partner.users.map((u) => (
           <div key={u.id} className="flex items-center justify-between px-5 py-3 hover:bg-white/2 transition-colors">
@@ -227,6 +240,9 @@ function PartnerCard({ owner, partner, onToggle, onDelete, onAddUser }: {
           </div>
         ))}
       </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
