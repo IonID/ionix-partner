@@ -26,9 +26,9 @@ timeout /t 3 /nobreak >nul
 echo Pornesc Web pe portul 3000...
 start "Ionix Web :3000" cmd /k "cd /d D:\Partener\ionix-partner\apps\web && npm run dev"
 
-:: Porneste ngrok tunel pentru Telegram webhook
+:: Porneste ngrok tunel pentru Telegram webhook (cu domeniu static)
 echo Pornesc ngrok (tunel Telegram)...
-start "Ionix ngrok :4000" cmd /k "%USERPROFILE%\ngrok.exe http 4000"
+start "Ionix ngrok :4000" cmd /k "%USERPROFILE%\ngrok.exe http --domain=unmoral-endnote-smirk.ngrok-free.dev 4000"
 
 echo.
 echo ==========================================
