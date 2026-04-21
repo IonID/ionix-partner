@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { FileText, TrendingUp, DollarSign, Users, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { FileText, TrendingUp, Users, Clock, CheckCircle, XCircle, CalendarDays, Calendar } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -76,10 +76,10 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <StatCard icon={FileText}  label="Cereri luna aceasta" value={stats?.overview?.monthApplications ?? 0} color="text-brand-400" />
-            <StatCard icon={TrendingUp} label="Total cereri"       value={stats?.overview?.totalApplications ?? 0} />
-            <StatCard icon={DollarSign} label="Comision aprobat (luna)" value={formatMDL(stats?.overview?.monthlyCommission ?? 0)} color="text-green-400" sub={`Rată: ${stats?.overview?.commissionRate ?? 0}%`} />
-            <StatCard icon={CheckCircle} label="Rata comision"     value={`${stats?.overview?.commissionRate ?? 0}%`} />
+            <StatCard icon={Clock}       label="Cereri de azi"          value={stats?.overview?.todayApplications ?? 0} color="text-brand-400" />
+            <StatCard icon={CalendarDays} label="Cereri săptămâna aceasta" value={stats?.overview?.weekApplications ?? 0} />
+            <StatCard icon={Calendar}    label="Cereri luna aceasta"    value={stats?.overview?.monthApplications ?? 0} />
+            <StatCard icon={FileText}    label="Total cereri"           value={stats?.overview?.totalApplications ?? 0} color="text-green-400" />
           </>
         )}
       </div>

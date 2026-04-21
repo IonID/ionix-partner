@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, UserCheck, UserX, Loader2, Upload,
-  ChevronDown, ChevronRight, Users, ShieldCheck, Eye, Send,
+  Users, ShieldCheck, Eye, Send,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { PartnerAvatar } from '@/components/PartnerAvatar';
@@ -161,87 +161,73 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-// ── Partner row ──────────────────────────────────────────────────────
-function PartnerRow({ owner, partner, onToggle, onDelete, onAddUser }: {
+// ── Partner card ─────────────────────────────────────────────────────
+function PartnerCard({ owner, partner, onToggle, onDelete, onAddUser }: {
   owner: UserRow; partner: PartnerData;
   onToggle: (id: string, active: boolean) => void;
   onDelete: (id: string) => void;
   onAddUser: (partnerId: string, partnerName: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const members = partner.users.filter((u) => u.id !== owner.id);
-  const ownerIdentity = owner.username ?? owner.email ?? owner.id;
-
   return (
-    <>
-      <tr className="border-b border-white/5">
-        <td>
-          <div className="flex items-center gap-3">
-            <LogoUpload partner={partner} />
-            <div>
-              <div className="font-semibold text-white">{partner.companyName}</div>
-              <div className="text-xs text-white/35">
-                {partner.users.length} utilizator{partner.users.length !== 1 ? 'i' : ''}
-              </div>
+    <div className="glass-card overflow-hidden">
+      {/* Header partener */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+        <div className="flex items-center gap-3">
+          <LogoUpload partner={partner} />
+          <div>
+            <div className="font-semibold text-white">{partner.companyName}</div>
+            <div className="text-xs text-white/35">
+              {partner.users.length} utilizator{partner.users.length !== 1 ? 'i' : ''}
             </div>
           </div>
-        </td>
-        <td className="text-white/60 text-xs">{ownerIdentity}</td>
-        <td>
-          <span className={`badge text-xs ${owner.isActive ? 'badge-green' : 'badge-gray'}`}>
-            {owner.isActive ? 'Activ' : 'Inactiv'}
-          </span>
-        </td>
-        <td className="text-white/40 text-xs">{formatDate(owner.createdAt)}</td>
-        <td>
-          <div className="flex items-center gap-1 flex-wrap">
-            <TelegramConfig partner={partner} />
-            <button onClick={() => onAddUser(partner.id, partner.companyName)}
-              className="btn-ghost px-2 py-1.5 text-blue-400/70 hover:text-blue-400" title="Adaugă utilizator">
-              <Users className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => onToggle(owner.id, !owner.isActive)}
-              className={`btn-ghost px-2 py-1.5 ${owner.isActive ? 'text-yellow-400/70 hover:text-yellow-400' : 'text-green-400/70 hover:text-green-400'}`}>
-              {owner.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-            </button>
-            <button onClick={() => { if (confirm(`Ștergi partenerul ${partner.companyName}?`)) onDelete(owner.id); }}
-              className="btn-ghost px-2 py-1.5 text-red-400/50 hover:text-red-400">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-            {members.length > 0 && (
-              <button onClick={() => setExpanded((v) => !v)} className="btn-ghost px-2 py-1.5 text-white/40">
-                {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
+        </div>
+        <div className="flex items-center gap-1">
+          <TelegramConfig partner={partner} />
+          <button onClick={() => onAddUser(partner.id, partner.companyName)}
+            className="btn-ghost px-2 py-1.5 text-blue-400/70 hover:text-blue-400" title="Adaugă utilizator">
+            <Users className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => { if (confirm(`Ștergi partenerul ${partner.companyName}?`)) onDelete(owner.id); }}
+            className="btn-ghost px-2 py-1.5 text-red-400/50 hover:text-red-400" title="Șterge partener">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
 
-      <AnimatePresence>
-        {expanded && members.map((m) => (
-          <motion.tr key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="bg-white/2 border-b border-white/3">
-            <td className="pl-16">
-              <div className="font-medium text-white/70 text-sm">{m.firstName} {m.lastName}</div>
-              <div className="text-xs text-white/35">{m.username ?? m.email}</div>
-            </td>
-            <td><RoleBadge role={m.role} /></td>
-            <td>
-              <span className={`badge text-xs ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
-                {m.isActive ? 'Activ' : 'Inactiv'}
+      {/* Lista utilizatori */}
+      <div className="divide-y divide-white/5">
+        {partner.users.map((u) => (
+          <div key={u.id} className="flex items-center justify-between px-5 py-3 hover:bg-white/2 transition-colors">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-medium text-white/60">
+                  {u.firstName[0]}{u.lastName[0]}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium text-white text-sm">{u.firstName} {u.lastName}</div>
+                <div className="text-xs text-white/35 truncate">{u.username ?? u.email}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <RoleBadge role={u.role} />
+              <span className={`badge text-xs ${u.isActive ? 'badge-green' : 'badge-gray'}`}>
+                {u.isActive ? 'Activ' : 'Inactiv'}
               </span>
-            </td>
-            <td />
-            <td>
-              <button onClick={() => { if (confirm(`Ștergi utilizatorul ${m.username ?? m.email}?`)) onDelete(m.id); }}
+              <button onClick={() => onToggle(u.id, !u.isActive)}
+                className={`btn-ghost px-2 py-1.5 ${u.isActive ? 'text-yellow-400/70 hover:text-yellow-400' : 'text-green-400/70 hover:text-green-400'}`}
+                title={u.isActive ? 'Dezactivează' : 'Activează'}>
+                {u.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+              </button>
+              <button onClick={() => { if (confirm(`Ștergi utilizatorul ${u.username ?? u.email}?`)) onDelete(u.id); }}
                 className="btn-ghost px-2 py-1.5 text-red-400/50 hover:text-red-400">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
-            </td>
-          </motion.tr>
+            </div>
+          </div>
         ))}
-      </AnimatePresence>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -456,36 +442,29 @@ export default function AdminUsersPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Partners table ─────────────────────────────────────── */}
-      <div className="glass-card overflow-hidden">
-        {isLoading ? (
-          <div className="p-6 animate-pulse space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-white/8 rounded-lg" />)}
-          </div>
-        ) : uniquePartnerRows.length === 0 ? (
-          <div className="p-10 text-center text-white/35 text-sm">Niciun partener înregistrat.</div>
-        ) : (
-          <table className="ionix-table">
-            <thead>
-              <tr>
-                <th>Partener / Logo</th>
-                <th>Cont principal</th>
-                <th>Status</th>
-                <th>Creat</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {uniquePartnerRows.map((owner) => (
-                <PartnerRow key={owner.partner!.id} owner={owner} partner={owner.partner!}
-                  onToggle={(id, active) => toggleUser({ id, isActive: active })}
-                  onDelete={(id) => deleteUser(id)}
-                  onAddUser={openAddUser} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {/* ── Partners list ──────────────────────────────────────── */}
+      {isLoading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="glass-card p-5 animate-pulse space-y-3">
+              <div className="h-8 bg-white/8 rounded w-40" />
+              <div className="h-10 bg-white/5 rounded" />
+              <div className="h-10 bg-white/5 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : uniquePartnerRows.length === 0 ? (
+        <div className="glass-card p-10 text-center text-white/35 text-sm">Niciun partener înregistrat.</div>
+      ) : (
+        <div className="space-y-4">
+          {uniquePartnerRows.map((owner) => (
+            <PartnerCard key={owner.partner!.id} owner={owner} partner={owner.partner!}
+              onToggle={(id, active) => toggleUser({ id, isActive: active })}
+              onDelete={(id) => deleteUser(id)}
+              onAddUser={openAddUser} />
+          ))}
+        </div>
+      )}
 
       {/* ── System users (Admin + Viewer) ──────────────────────── */}
       {systemUsers.length > 0 && (

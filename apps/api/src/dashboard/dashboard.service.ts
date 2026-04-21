@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
-import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
 
 @Injectable()
 export class DashboardService {
@@ -68,13 +68,24 @@ export class DashboardService {
     const now = new Date();
     const monthStart = startOfMonth(now);
     const monthEnd = endOfMonth(now);
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+    const dayStart = startOfDay(now);
+    const dayEnd = endOfDay(now);
 
     const [
+      todayApplications,
+      weekApplications,
       monthApplications,
       totalApplications,
       recentApplications,
-      monthlyCommission,
     ] = await Promise.all([
+      this.prisma.application.count({
+        where: { partnerId: partner.id, createdAt: { gte: dayStart, lte: dayEnd } },
+      }),
+      this.prisma.application.count({
+        where: { partnerId: partner.id, createdAt: { gte: weekStart, lte: weekEnd } },
+      }),
       this.prisma.application.count({
         where: { partnerId: partner.id, createdAt: { gte: monthStart, lte: monthEnd } },
       }),
@@ -89,24 +100,16 @@ export class DashboardService {
           monthlyPayment: true, status: true, createdAt: true,
         },
       }),
-      this.prisma.application.aggregate({
-        where: {
-          partnerId: partner.id,
-          status: 'APPROVED',
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-        _sum: { commissionAmount: true },
-      }),
     ]);
 
     const monthlyVolume = await this.getPartnerMonthlyVolume(partner.id, 6);
 
     return {
       overview: {
+        todayApplications,
+        weekApplications,
         monthApplications,
         totalApplications,
-        monthlyCommission: Number(monthlyCommission._sum.commissionAmount ?? 0),
-        commissionRate: partner.commissionRate,
       },
       recentApplications,
       monthlyVolume,

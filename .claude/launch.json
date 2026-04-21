@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "autoPort": false,
+  "configurations": [
+    {
+      "name": "NestJS API (dev)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev"],
+      "port": 4000,
+      "cwd": "${workspaceFolder}/apps/api"
+    },
+    {
+      "name": "Next.js Web (dev)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "cwd": "${workspaceFolder}/apps/web"
+    }
+  ]
+}
