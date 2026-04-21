@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,10 +35,6 @@ export function Header({ title, subtitle }: HeaderProps) {
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
         )}
-
-        <button className="p-2 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
-          <Bell className="w-4 h-4" />
-        </button>
 
         <div className="h-8 w-px bg-border" />
 
