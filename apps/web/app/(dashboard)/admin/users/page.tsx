@@ -40,7 +40,7 @@ function LogoUpload({ partner }: { partner: PartnerData }) {
     try {
       const fd = new FormData();
       fd.append('logo', file);
-      await api.post(`/users/partners/${partner.id}/logo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post(`/users/partners/${partner.id}/logo`, fd);
       qc.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'Logo actualizat!' });
     } catch (err: any) {
