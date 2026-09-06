@@ -53,3 +53,8 @@ apps/api/prisma/migrations/20260414045531_init/
 # Docker volumes (local only)
 postgres_data/
 redis_data/
+
+# Artefacte de livrare — se construiesc, nu se pastreaza in depozit
+*.tar
+*.zip
+compose.yaml
