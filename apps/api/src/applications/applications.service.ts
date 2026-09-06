@@ -54,7 +54,9 @@ export class ApplicationsService {
         monthlyPayment:  calc.monthlyPayment,
         totalAmount:     calc.totalAmount,
         dae:             calc.dae,
-        commissionAmount: calc.commissionAmount,
+        commissionAmount: dto.creditType === 'ZERO' ? 0 : calc.commissionAmount,
+        paymentDate:     dto.paymentDate ? new Date(dto.paymentDate) : null,
+        comments:        dto.comments ?? null,
       },
     });
 
@@ -67,7 +69,7 @@ export class ApplicationsService {
     const docLabelMap: Record<string, string> = {
       idFront: '📋 Buletin de Identitate (față)',
       idBack:  '📋 Buletin de Identitate (verso)',
-      selfie:  '🤳 Selfie cu buletinul',
+      selfie:  '📎 Alte acte',
     };
 
     const savedFiles: { path: string; label: string }[] = [];
@@ -94,6 +96,8 @@ export class ApplicationsService {
         monthlyPayment:  calc.monthlyPayment,
         totalAmount:     calc.totalAmount,
         dae:             calc.dae,
+        paymentDate:     dto.paymentDate ?? null,
+        comments:        dto.comments    ?? null,
       },
       partnerTelegram,
       savedFiles,
@@ -109,15 +113,40 @@ export class ApplicationsService {
     return this.findOne(application.id, requestingUser);
   }
 
-  async findAll(requestingUser: any, page = 1, limit = 20, status?: string) {
+  async findAll(
+    requestingUser: any,
+    page = 1,
+    limit = 20,
+    status?: string,
+    partnerId?: string,
+    creditType?: string,
+    createdByUserId?: string,
+    statusChangedBy?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
     const skip = (page - 1) * limit;
 
     const isSystemWide = requestingUser.role === Role.ADMIN || requestingUser.role === Role.VIEWER;
-    const baseWhere = isSystemWide
+    const where: any = isSystemWide
       ? {}
       : { partner: { users: { some: { id: requestingUser.id } } } };
 
-    const where = status ? { ...baseWhere, status: status as any } : baseWhere;
+    if (status)          where.status          = status;
+    if (partnerId)       where.partnerId       = partnerId;
+    if (creditType)      where.creditType      = creditType;
+    if (createdByUserId) where.createdByUserId = createdByUserId;
+    if (statusChangedBy) where.statusChangedByName = { contains: statusChangedBy, mode: 'insensitive' };
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.application.findMany({
@@ -197,7 +226,13 @@ export class ApplicationsService {
   }
 
   async resubmit(id: string, requestingUser: any) {
-    const application = await this.prisma.application.findUnique({ where: { id } });
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: {
+        partner:   { select: { telegramBotToken: true, telegramChatId: true, telegramEnabled: true } },
+        documents: { select: { path: true, type: true } },
+      },
+    });
 
     if (!application) throw new NotFoundException('Cererea nu a fost găsită');
 
@@ -207,9 +242,110 @@ export class ApplicationsService {
 
     await this.assertPartnerAccess(application, requestingUser, 'repune');
 
+    const updated = await this.prisma.application.update({
+      where: { id },
+      data: { status: 'PENDING', telegramMessageId: null, statusChangedByName: `${requestingUser.firstName} ${requestingUser.lastName}` },
+    });
+
+    const docLabelMap: Record<string, string> = {
+      ID_FRONT: '📋 Buletin de Identitate (față)',
+      ID_BACK:  '📋 Buletin de Identitate (verso)',
+      SELFIE:   '📎 Alte acte',
+      OTHER:    '📎 Document',
+    };
+
+    const attachments = application.documents.map((doc) => ({
+      path:  this.documents.getAbsolutePath(doc.path),
+      label: docLabelMap[doc.type] ?? '📎 Document',
+    }));
+
+    const msgId = await this.telegram.sendApplication(
+      {
+        applicationId:   id,
+        clientFirstName: application.clientFirstName,
+        clientLastName:  application.clientLastName,
+        clientProduct:   application.clientIdnp ?? '',
+        clientPhone:     application.clientPhone,
+        creditType:      application.creditType,
+        amount:          Number(application.amount),
+        months:          application.months,
+        monthlyPayment:  Number(application.monthlyPayment),
+        totalAmount:     Number(application.totalAmount),
+        dae:             Number(application.dae),
+      },
+      {
+        token:   application.partner.telegramBotToken ?? undefined,
+        chatId:  application.partner.telegramChatId   ?? undefined,
+        enabled: application.partner.telegramEnabled,
+      },
+      attachments,
+    );
+
+    if (msgId) {
+      await this.prisma.application.update({
+        where: { id },
+        data: { telegramMessageId: msgId },
+      });
+    }
+
+    return updated;
+  }
+
+  async setContractOutcome(id: string, outcome: string, requestingUser: any) {
+    if (outcome !== 'SIGNED' && outcome !== 'REFUSED') {
+      throw new BadRequestException('Rezultat invalid — folosește SIGNED sau REFUSED');
+    }
+
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { partner: { select: { telegramBotToken: true, telegramChatId: true, telegramEnabled: true } } },
+    });
+
+    if (!application) throw new NotFoundException('Cererea nu a fost găsită');
+
+    if (application.status !== 'APPROVED') {
+      throw new BadRequestException('Rezultatul poate fi transmis doar pentru cererile aprobate');
+    }
+
+    if (application.contractOutcome) {
+      throw new BadRequestException('Rezultatul a fost deja transmis pentru această cerere');
+    }
+
+    // Orice utilizator al aceluiași partener (sau admin) poate anunța rezultatul
+    if (requestingUser.role !== Role.ADMIN) {
+      const isMember = await this.prisma.user.findFirst({
+        where: { id: requestingUser.id, partnerId: application.partnerId },
+      });
+      if (!isMember) throw new ForbiddenException('Doar utilizatorii partenerului pot transmite rezultatul');
+    }
+
+    const byName = `${requestingUser.firstName} ${requestingUser.lastName}`;
+
+    const sent = await this.telegram.sendContractOutcome(
+      id,
+      outcome,
+      byName,
+      `${application.clientFirstName} ${application.clientLastName}`,
+      application.clientIdnp ?? '',   // product name stored here
+      Number(application.amount),
+      {
+        token:   application.partner.telegramBotToken ?? undefined,
+        chatId:  application.partner.telegramChatId   ?? undefined,
+        enabled: application.partner.telegramEnabled,
+      },
+    );
+
+    if (!sent) {
+      throw new BadRequestException('Mesajul nu a putut fi trimis în grupul Telegram — verifică configurarea');
+    }
+
     return this.prisma.application.update({
       where: { id },
-      data: { status: 'PENDING', statusChangedByName: `${requestingUser.firstName} ${requestingUser.lastName}` },
+      data: {
+        contractOutcome:       outcome,
+        contractOutcomeByName: byName,
+        contractOutcomeAt:     new Date(),
+      },
     });
   }
 

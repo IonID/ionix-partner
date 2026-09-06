@@ -8,7 +8,7 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStats(user: any) {
-    if (user.role === Role.ADMIN) {
+    if (user.role === Role.ADMIN || user.role === Role.VIEWER) {
       return this.getAdminStats();
     }
     return this.getPartnerStats(user);
@@ -27,7 +27,7 @@ export class DashboardService {
       recentApplications,
       statusBreakdown,
     ] = await Promise.all([
-      this.prisma.partner.count(),
+      this.prisma.partner.count({ where: { users: { some: {} } } }),
       this.prisma.application.count(),
       this.prisma.application.count({
         where: { createdAt: { gte: monthStart, lte: monthEnd } },
@@ -79,6 +79,7 @@ export class DashboardService {
       monthApplications,
       totalApplications,
       recentApplications,
+      statusBreakdownRaw,
     ] = await Promise.all([
       this.prisma.application.count({
         where: { partnerId: partner.id, createdAt: { gte: dayStart, lte: dayEnd } },
@@ -100,6 +101,11 @@ export class DashboardService {
           monthlyPayment: true, status: true, createdAt: true,
         },
       }),
+      this.prisma.application.groupBy({
+        by: ['status'],
+        where: { partnerId: partner.id },
+        _count: { id: true },
+      }),
     ]);
 
     const monthlyVolume = await this.getPartnerMonthlyVolume(partner.id, 6);
@@ -111,6 +117,9 @@ export class DashboardService {
         monthApplications,
         totalApplications,
       },
+      statusBreakdown: Object.fromEntries(
+        statusBreakdownRaw.map((s) => [s.status, s._count.id]),
+      ),
       recentApplications,
       monthlyVolume,
     };

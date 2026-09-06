@@ -1,7 +1,8 @@
 import {
   IsString, IsEnum, IsNumber, IsPositive, IsInt, Min, Max, MinLength,
+  IsOptional, IsDateString,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreditType } from '@prisma/client';
 
 export class CreateApplicationDto {
@@ -32,7 +33,7 @@ export class CreateApplicationDto {
   @ApiProperty({ example: 10000 })
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
-  @Max(100000)
+  @Max(150000)
   amount: number;
 
   @ApiProperty({ example: 12 })
@@ -40,4 +41,14 @@ export class CreateApplicationDto {
   @Min(1)
   @Max(60)
   months: number;
+
+  @ApiPropertyOptional({ example: '2025-06-15', description: 'Data de plată aleasă de client (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @ApiPropertyOptional({ example: 'Client dorește livrare urgentă', description: 'Observații opționale' })
+  @IsOptional()
+  @IsString()
+  comments?: string;
 }

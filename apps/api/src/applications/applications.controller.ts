@@ -35,8 +35,16 @@ export class ApplicationsController {
     @Query('page') page = 1,
     @Query('limit') limit = 20,
     @Query('status') status?: string,
+    @Query('partnerId') partnerId?: string,
+    @Query('creditType') creditType?: string,
+    @Query('createdByUserId') createdByUserId?: string,
+    @Query('statusChangedBy') statusChangedBy?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
-    return this.applicationsService.findAll(user, +page, +limit, status);
+    return this.applicationsService.findAll(
+      user, +page, +limit, status, partnerId, creditType, createdByUserId, statusChangedBy, dateFrom, dateTo,
+    );
   }
 
   @Get('export')
@@ -157,5 +165,28 @@ export class ApplicationsController {
     @CurrentUser() user: any,
   ) {
     return this.applicationsService.updateStatus(id, body.status, body.notes, user);
+  }
+
+  @Patch(':id/contract-outcome')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.PARTNER, 'PARTNER_ADMIN' as any, 'MANAGER' as any)
+  @ApiOperation({ summary: '[MANAGER] Transmite în Telegram rezultatul final: contract semnat / client a refuzat' })
+  async setContractOutcome(
+    @Param('id') id: string,
+    @Body() body: { outcome: 'SIGNED' | 'REFUSED' },
+    @CurrentUser() user: any,
+    @Req() req: Request,
+  ) {
+    const result = await this.applicationsService.setContractOutcome(id, body.outcome, user);
+    const ip = (req.headers['x-forwarded-for'] as string) || (req as any).ip || 'unknown';
+    await this.auditService.log({
+      userId: user.id,
+      action: 'CONTRACT_OUTCOME',
+      resource: 'application',
+      resourceId: id,
+      ipAddress: ip,
+      metadata: { outcome: body.outcome },
+    });
+    return result;
   }
 }
