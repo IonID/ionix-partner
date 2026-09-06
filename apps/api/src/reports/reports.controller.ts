@@ -29,7 +29,7 @@ export class ReportsController {
   ) {
     const ip = (req.headers['x-forwarded-for'] as string) || req.ip || 'unknown';
     const commissionRate = user.partner?.commissionRate ?? 0;
-    const partnerName = user.partner?.companyName ?? 'Priminvestnord';
+    const partnerName = user.partner?.companyName ?? 'Bug Fix Group';
 
     const calc = await this.calculatorService.calculate(dto, commissionRate);
     const pdfBuffer = await this.reportsService.generateAmortizationPdf(calc, partnerName);

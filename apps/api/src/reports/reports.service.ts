@@ -36,7 +36,7 @@ export class ReportsService {
       x: 36, y: height - 32,
       font: fontBold, size: 18, color: white,
     });
-    page.drawText('Priminvestnord SRL', {
+    page.drawText('Bug Fix Group SRL', {
       x: 36, y: height - 48,
       font: fontReg, size: 9, color: rgb(0.75, 0.82, 0.94),
     });
@@ -167,7 +167,7 @@ export class ReportsService {
       start: { x: 30, y: 40 }, end: { x: width - 30, y: 40 },
       thickness: 0.5, color: gray200,
     });
-    lastPage.drawText('Elaborat de @Bajerean Ion — Ionix Partner Platform | Priminvestnord SRL', {
+    lastPage.drawText('Elaborat de @Bajerean Ion — Ionix Partner Platform | Bug Fix Group SRL', {
       x: 30, y: 28, font: fontReg, size: 7, color: gray500,
     });
     lastPage.drawText('Document generat automat. Nu are valoare juridica fara semnatura unui reprezentant autorizat.', {
