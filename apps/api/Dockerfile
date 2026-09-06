@@ -49,4 +49,4 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 USER nestjs
 EXPOSE 4000
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main"]

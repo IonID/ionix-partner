@@ -57,7 +57,7 @@ async function bootstrap() {
   if (configService.get('NODE_ENV') !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('Ionix Partner API')
-      .setDescription('B2B Partner Portal — Priminvestnord')
+      .setDescription('B2B Partner Portal — Bug Fix Group')
       .setVersion('1.0')
       .addBearerAuth()
       .addCookieAuth('refreshToken')
