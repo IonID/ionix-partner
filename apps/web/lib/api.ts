@@ -33,7 +33,12 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    if (error.response?.status === 401 && !original._retry) {
+    // Never auto-refresh for auth endpoints — avoids infinite deadlock
+    const isAuthEndpoint =
+      original?.url?.includes('/auth/login') ||
+      original?.url?.includes('/auth/refresh');
+
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -84,7 +89,8 @@ function getCookieValue(name: string): string | undefined {
 
 function setCookieValue(name: string, value: string, minutes: number) {
   const expires = new Date(Date.now() + minutes * 60_000).toUTCString();
-  document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Strict`;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Strict${secure}`;
 }
 
 function deleteCookie(name: string) {

@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -17,7 +18,7 @@ const loginSchema = z.object({
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
@@ -37,6 +38,7 @@ export default function LoginPage() {
     setError('');
     try {
       await login(data.credential, data.password);
+      router.refresh();
       router.push(callbackUrl);
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'Credențiale invalide');
@@ -123,7 +125,7 @@ export default function LoginPage() {
                 className="text-xs font-medium tracking-widest uppercase"
                 style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(30,58,95,0.50)' }}
               >
-                OCN „Priminvestnord" SRL
+                Bug Fix Group SRL
               </div>
             ) : (
               <div className="h-4" />
@@ -233,5 +235,13 @@ export default function LoginPage() {
         )}
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
   );
 }

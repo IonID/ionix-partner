@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, setCookieValue, deleteCookie } from '@/lib/api';
 
 interface User {
@@ -23,6 +24,7 @@ function notifyAll() {
 export function useAuth() {
   const [user, setUser] = useState<User | null>(globalUser);
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const update = () => setUser(globalUser);
@@ -56,7 +58,8 @@ export function useAuth() {
     deleteCookie('accessToken');
     globalUser = null;
     notifyAll();
-  }, []);
+    queryClient.clear();
+  }, [queryClient]);
 
   // ── Fetch current user (on mount, if token exists) ─────────────
   const fetchMe = useCallback(async () => {

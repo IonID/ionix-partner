@@ -8,6 +8,7 @@ import {
   ArrowLeft, User, Phone, CreditCard,
   FileText, CheckCircle, Clock, XCircle, Download,
   ExternalLink, Loader2, AlertTriangle, ImageIcon, ShoppingBag, RotateCcw,
+  PenLine, Send,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
@@ -29,7 +30,7 @@ const statusConfig: Record<AppStatus, { label: string; badge: string; icon: any 
 const docTypeLabel: Record<string, string> = {
   ID_FRONT: 'Față buletin',
   ID_BACK:  'Verso buletin',
-  SELFIE:   'Selfie cu buletinul',
+  SELFIE:   'Alte acte',
   OTHER:    'Alt document',
 };
 
@@ -213,6 +214,112 @@ function StatusPanel({ app, isAdmin }: { app: any; isAdmin: boolean }) {
   );
 }
 
+// ── Rezultat contract (managerul care a depus cererea) ───────────
+function ContractOutcomePanel({ app, canSubmit }: { app: any; canSubmit: boolean }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [pendingOutcome, setPendingOutcome] = useState<'SIGNED' | 'REFUSED' | null>(null);
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: (outcome: 'SIGNED' | 'REFUSED') =>
+      api.patch(`/applications/${app.id}/contract-outcome`, { outcome }),
+    onSuccess: (_, outcome) => {
+      toast({
+        title: 'Mesaj trimis în Telegram!',
+        description: outcome === 'SIGNED'
+          ? 'Contractul a fost anunțat ca semnat.'
+          : 'Refuzul clientului a fost transmis.',
+      });
+      setPendingOutcome(null);
+      qc.invalidateQueries({ queryKey: ['application', app.id] });
+      qc.invalidateQueries({ queryKey: ['applications'] });
+    },
+    onError: (err: any) =>
+      toast({ title: 'Eroare', description: err?.response?.data?.message ?? 'Nu s-a putut trimite mesajul', variant: 'destructive' }),
+  });
+
+  // Rezultat deja transmis → afișează doar starea
+  if (app.contractOutcome) {
+    const signed = app.contractOutcome === 'SIGNED';
+    return (
+      <div className={`glass-card p-5 ${signed ? 'border-green-500/20' : 'border-red-500/20'}`}>
+        <h2 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-3">Rezultat Contract</h2>
+        <div className="flex items-center gap-2">
+          {signed
+            ? <PenLine className="w-4 h-4 text-green-400" />
+            : <XCircle className="w-4 h-4 text-red-400" />}
+          <span className={`text-sm font-semibold ${signed ? 'text-green-400' : 'text-red-400'}`}>
+            {signed ? 'Contract semnat' : 'Client a refuzat'}
+          </span>
+        </div>
+        <p className="text-xs text-white/35 mt-2">
+          Transmis de {app.contractOutcomeByName}
+          {app.contractOutcomeAt && ` · ${formatDate(app.contractOutcomeAt)}`}
+        </p>
+      </div>
+    );
+  }
+
+  if (!canSubmit) return null;
+
+  return (
+    <div className="glass-card p-5 space-y-3">
+      <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+        <Send className="w-4 h-4 text-brand-400" /> Rezultat Contract
+      </h2>
+      <p className="text-xs text-white/40">
+        Anunță în grupul Telegram rezultatul final al cererii aprobate.
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setPendingOutcome('SIGNED')}
+          className="btn-ghost flex-1 text-xs py-2 border border-green-500/40 text-green-400 hover:bg-green-500/10"
+        >
+          <PenLine className="w-3.5 h-3.5" /> Contract Semnat
+        </button>
+        <button
+          onClick={() => setPendingOutcome('REFUSED')}
+          className="btn-ghost flex-1 text-xs py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10"
+        >
+          <XCircle className="w-3.5 h-3.5" /> Client a Refuzat
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {pendingOutcome && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-3"
+          >
+            <p className="text-sm text-white/80">
+              Confirmi trimiterea mesajului{' '}
+              <span className={`font-semibold ${pendingOutcome === 'SIGNED' ? 'text-green-400' : 'text-red-400'}`}>
+                "{pendingOutcome === 'SIGNED' ? 'Contract semnat' : 'Client a refuzat'}"
+              </span>{' '}
+              în grupul Telegram?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => mutate(pendingOutcome!)}
+                disabled={isPending}
+                className="btn-primary py-1.5 px-4 text-xs"
+              >
+                {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                Trimite
+              </button>
+              <button onClick={() => setPendingOutcome(null)} className="btn-ghost py-1.5 px-3 text-xs">
+                Anulează
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 export default function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -251,6 +358,11 @@ export default function ApplicationDetailPage() {
     (isPartnerAdmin && userPartnerId === app.partnerId) ||
     (isManager && app.createdByUser?.id === user?.id)
   );
+
+  // Can announce contract outcome: APPROVED + orice utilizator al partenerului (sau admin)
+  const canSendOutcome = !!(app && app.status === 'APPROVED' && (
+    isAdmin || isPartnerAdmin || isManager
+  ));
 
   const [confirmResubmit, setConfirmResubmit] = useState(false);
 
@@ -545,6 +657,13 @@ export default function ApplicationDetailPage() {
               <InfoRow label="Ultima modificare" value={formatDate(app.updatedAt)} mono={false} />
             </div>
           </motion.div>
+
+          {/* Rezultat contract — vizibil după aprobare */}
+          {(app.contractOutcome || canSendOutcome) && (
+            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+              <ContractOutcomePanel app={app} canSubmit={canSendOutcome} />
+            </motion.div>
+          )}
 
           {/* Status change panel — Admin (orice cerere) sau Partner Admin (cereri Manager) */}
           {(isAdmin || isPartnerAdminOnManagerApp) && (

@@ -3,7 +3,7 @@
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import Image from 'next/image';
 
 interface HeaderProps {
   title: string;
@@ -11,7 +11,6 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -38,10 +37,15 @@ export function Header({ title, subtitle }: HeaderProps) {
 
         <div className="h-8 w-px bg-border" />
 
-        <div className="text-right">
-          <div className="text-sm font-medium">{user?.firstName} {user?.lastName}</div>
-          <div className="text-xs text-muted-foreground">{user?.email}</div>
-        </div>
+        {mounted && (
+          <Image
+            src={theme === 'dark' ? '/partners/Logo_white.png' : '/partners/Logo.png'}
+            alt="Prim Invest Nord"
+            width={160}
+            height={40}
+            className="h-[50px] w-auto object-contain"
+          />
+        )}
       </div>
     </header>
   );

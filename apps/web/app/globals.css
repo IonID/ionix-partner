@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -293,3 +291,16 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); 
 
 /* Pulse skeleton animation (used in loading states) */
 html:not(.dark) .bg-white\/8.animate-pulse { background-color: rgba(0,0,0,0.06); }
+
+/* Native select option visibility fix */
+select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+.dark select option {
+  background-color: hsl(224 15% 11%);
+  color: hsl(0 0% 92%);
+}
+.dark select {
+  color-scheme: dark;
+}

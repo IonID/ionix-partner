@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { formatMDL, formatDate } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useTheme } from 'next-themes';
 
 const statusConfig = {
   PENDING:    { label: 'În așteptare',  color: 'badge-yellow', icon: Clock },
@@ -34,6 +35,12 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-white' }: any) 
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme !== 'light';
+  const tickColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.45)';
+  const tooltipBg = isDark ? '#1a1e2c' : '#ffffff';
+  const tooltipBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const tooltipLabel = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)';
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -56,30 +63,33 @@ export default function DashboardPage() {
     );
   }
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdminView = user?.role === 'ADMIN' || user?.role === 'VIEWER';
+
+  const subtitle = user?.role === 'ADMIN'
+    ? 'Panou de administrare'
+    : user?.role === 'VIEWER'
+      ? 'Panou de vizualizare'
+      : `Partener: ${user?.partner?.companyName ?? ''}`;
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <Header
-        title={`Bun venit, ${user?.firstName}!`}
-        subtitle={isAdmin ? 'Panou de administrare' : `Partener: ${user?.partner?.companyName}`}
-      />
+      <Header title={`Bun venit, ${user?.firstName}!`} subtitle={subtitle} />
 
       {/* ── Stats grid ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {isAdmin ? (
+        {isAdminView ? (
           <>
-            <StatCard icon={Users}     label="Parteneri activi"   value={stats?.overview?.totalPartners ?? 0} />
-            <StatCard icon={FileText}  label="Total cereri"       value={stats?.overview?.totalApplications ?? 0} />
-            <StatCard icon={TrendingUp} label="Cereri luna aceasta" value={stats?.overview?.monthApplications ?? 0} color="text-brand-400" />
-            <StatCard icon={CheckCircle} label="Aprobate" value={stats?.statusBreakdown?.APPROVED ?? 0} color="text-green-400" />
+            <StatCard icon={Users}       label="Parteneri activi"    value={stats?.overview?.totalPartners ?? 0} />
+            <StatCard icon={FileText}    label="Total cereri"        value={stats?.overview?.totalApplications ?? 0} />
+            <StatCard icon={TrendingUp}  label="Cereri luna aceasta" value={stats?.overview?.monthApplications ?? 0} color="text-brand-400" />
+            <StatCard icon={CheckCircle} label="Aprobate"            value={stats?.statusBreakdown?.APPROVED ?? 0} color="text-green-400" />
           </>
         ) : (
           <>
-            <StatCard icon={Clock}       label="Cereri de azi"          value={stats?.overview?.todayApplications ?? 0} color="text-brand-400" />
-            <StatCard icon={CalendarDays} label="Cereri săptămâna aceasta" value={stats?.overview?.weekApplications ?? 0} />
-            <StatCard icon={Calendar}    label="Cereri luna aceasta"    value={stats?.overview?.monthApplications ?? 0} />
-            <StatCard icon={FileText}    label="Total cereri"           value={stats?.overview?.totalApplications ?? 0} color="text-green-400" />
+            <StatCard icon={Clock}        label="Cereri de azi"             value={stats?.overview?.todayApplications ?? 0} color="text-brand-400" />
+            <StatCard icon={CalendarDays} label="Cereri săptămâna aceasta"  value={stats?.overview?.weekApplications ?? 0} />
+            <StatCard icon={Calendar}     label="Cereri luna aceasta"       value={stats?.overview?.monthApplications ?? 0} />
+            <StatCard icon={FileText}     label="Total cereri"              value={stats?.overview?.totalApplications ?? 0} color="text-green-400" />
           </>
         )}
       </div>
@@ -88,14 +98,14 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* Volume chart */}
         <div className="glass-card p-5 lg:col-span-3">
-          <h2 className="text-sm font-semibold text-white mb-4">Volum cereri — ultimele 6 luni</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Volum cereri — ultimele 6 luni</h2>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={stats?.monthlyVolume ?? []} barCategoryGap="30%">
-              <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
+              <XAxis dataKey="month" tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
               <Tooltip
-                contentStyle={{ background: '#1a1e2c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
+                contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: 8 }}
+                labelStyle={{ color: tooltipLabel }}
                 itemStyle={{ color: '#22DB80' }}
               />
               <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
@@ -136,11 +146,11 @@ export default function DashboardPage() {
             <thead>
               <tr>
                 <th>Client</th>
-                <th>Tip</th>
-                <th>Sumă</th>
-                <th>Rată / lună</th>
+                <th className="hidden md:table-cell">Tip</th>
+                <th className="hidden md:table-cell">Sumă</th>
+                <th className="hidden md:table-cell">Rată / lună</th>
                 <th>Status</th>
-                <th>Data</th>
+                <th className="hidden md:table-cell">Data</th>
               </tr>
             </thead>
             <tbody>
@@ -148,16 +158,16 @@ export default function DashboardPage() {
                 const sc = statusConfig[app.status as keyof typeof statusConfig];
                 return (
                   <tr key={app.id}>
-                    <td className="font-medium text-white">{app.clientFirstName} {app.clientLastName}</td>
-                    <td>
+                    <td className="font-medium text-white truncate max-w-[120px] sm:max-w-none">{app.clientFirstName} {app.clientLastName}</td>
+                    <td className="hidden md:table-cell">
                       <span className={`badge text-xs ${app.creditType === 'ZERO' ? 'badge-green' : 'badge-blue'}`}>
                         {app.creditType === 'ZERO' ? 'Credit Zero' : 'Credit Clasic'}
                       </span>
                     </td>
-                    <td className="font-mono text-white/80">{formatMDL(app.amount)}</td>
-                    <td className="font-mono text-brand-400">{formatMDL(app.monthlyPayment)}/lună</td>
+                    <td className="hidden md:table-cell font-mono text-white/80 whitespace-nowrap">{formatMDL(app.amount)}</td>
+                    <td className="hidden md:table-cell font-mono text-brand-400">{formatMDL(app.monthlyPayment)}/lună</td>
                     <td><span className={`badge text-xs ${sc?.color ?? 'badge-gray'}`}>{sc?.label ?? app.status}</span></td>
-                    <td className="text-white/40">{formatDate(app.createdAt)}</td>
+                    <td className="hidden md:table-cell text-white/40">{formatDate(app.createdAt)}</td>
                   </tr>
                 );
               })}

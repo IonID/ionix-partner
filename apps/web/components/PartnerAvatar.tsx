@@ -1,13 +1,12 @@
 'use client';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL
-  ? `${process.env.NEXT_PUBLIC_API_URL}/uploads`
-  : '/uploads-proxy';
+const API_BASE = '/uploads-proxy';
 
 const SIZES = {
   sm:  'w-7 h-7 text-[10px]',
   md:  'w-9 h-9 text-xs',
   lg:  'w-12 h-12 text-sm',
+  xl:  'w-[42px] h-[42px] text-sm',
 };
 
 interface PartnerAvatarProps {
