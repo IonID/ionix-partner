@@ -7,6 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DocumentType } from '@prisma/client';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg':      '.jpg',
+  'image/png':       '.png',
+  'image/webp':      '.webp',
+  'application/pdf': '.pdf',
+};
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
 @Injectable()
@@ -37,7 +43,8 @@ export class DocumentsService {
       throw new BadRequestException('Fișierul depășește limita de 10 MB');
     }
 
-    const ext = path.extname(file.originalname);
+    // Extensia derivată din MIME type validat, nu din originalname (previne .php etc.)
+    const ext = MIME_TO_EXT[file.mimetype];
     const storedName = `${uuidv4()}${ext}`;
     const subDir = path.join(this.uploadDir, applicationId);
     fs.mkdirSync(subDir, { recursive: true });
@@ -61,7 +68,12 @@ export class DocumentsService {
   }
 
   getAbsolutePath(relativePath: string): string {
-    return path.join(this.uploadDir, relativePath);
+    const resolved = path.resolve(this.uploadDir, relativePath);
+    const base = path.resolve(this.uploadDir);
+    if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+      throw new BadRequestException('Cale de fișier invalidă');
+    }
+    return resolved;
   }
 
   async deleteByApplication(applicationId: string) {
