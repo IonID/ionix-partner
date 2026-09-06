@@ -27,6 +27,8 @@ interface ApplicationInfo {
   monthlyPayment: number;
   totalAmount: number;
   dae: number;
+  paymentDate?: string | null;
+  comments?: string | null;
 }
 
 @Injectable()
@@ -60,6 +62,15 @@ export class TelegramService implements OnApplicationBootstrap {
     return { bot: new TelegramBot(partner.token, { polling: false }), chatId: partner.chatId };
   }
 
+  /** Escape caractere speciale HTML — previne stricarea mesajului când datele
+   *  clientului conțin <, > sau & (ex: produs "5<6", nume cu &, etc.) */
+  private esc(v: unknown): string {
+    return String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   private formatDate(d: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0');
     const local = new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Chisinau' }));
@@ -91,28 +102,42 @@ export class TelegramService implements OnApplicationBootstrap {
     const creditLabel = info.creditType === 'ZERO' ? 'ZERO' : 'CLASIC';
     const div = '━━━━━━━━━━━━━━━━';
 
-    return [
+    const lines = [
       `🔔 <b>CERERE NOUĂ · Credit ${creditLabel}</b>`,
       div,
-      `• <b>Client:</b>  <code>${info.clientFirstName} ${info.clientLastName}</code>`,
-      `• <b>Produs:</b>  <code>${info.clientProduct}</code>`,
-      `• <b>Telefon:</b> <code>${info.clientPhone}</code>`,
+      `• <b>Client:</b>  <code>${this.esc(info.clientFirstName)} ${this.esc(info.clientLastName)}</code>`,
+      `• <b>Produs:</b>  <code>${this.esc(info.clientProduct)}</code>`,
+      `• <b>Telefon:</b> <code>${this.esc(info.clientPhone)}</code>`,
       `• <b>Sumă:</b>    <code>${fmt(info.amount)} MDL</code>`,
       `• <b>Termen:</b>  <code>${info.months} luni</code>`,
       `• <b>Rată/lună:</b> <code>${fmt(info.monthlyPayment)} MDL</code>`,
       `• <b>VTP:</b>     <code>${fmt(info.totalAmount)} MDL</code>`,
       `• <b>DAE:</b>     <code>${info.dae}%</code>`,
-      `• <b>Ora:</b>     <code>${this.formatDate(new Date())}</code>`,
-      div,
-    ].join('\n');
+    ];
+
+    if (info.paymentDate) {
+      const d   = new Date(info.paymentDate);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      lines.push(`• <b>Data plată:</b> <code>${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}</code>`);
+    }
+
+    if (info.comments?.trim()) {
+      lines.push(`• <b>Comentarii:</b> <i>${this.esc(info.comments.trim())}</i>`);
+    }
+
+    lines.push(`• <b>Ora:</b>     <code>${this.formatDate(new Date())}</code>`);
+    lines.push(div);
+
+    return lines.join('\n');
   }
 
   /** Mesaj compact de acțiuni — se editează la fiecare schimbare de status */
-  private buildActionText(status: string, notes?: string): string {
+  private buildActionText(status: string, notes?: string, processorName?: string): string {
     const emoji = this.statusEmoji(status);
     const label = this.statusLabel(status);
-    const notesLine = notes ? `\n📝 <i>${notes}</i>` : '';
-    return `${emoji} <b>Status: ${label}</b>${notesLine}`;
+    const processorLine = processorName ? `\n👤 Preluat de: <b>${this.esc(processorName)}</b>` : '';
+    const notesLine = notes ? `\n📝 <i>${this.esc(notes)}</i>` : '';
+    return `${emoji} <b>Status: ${label}</b>${processorLine}${notesLine}`;
   }
 
   // ── Keyboard builder ──────────────────────────────────────────────
@@ -150,13 +175,79 @@ export class TelegramService implements OnApplicationBootstrap {
     return [
       div,
       `🔔 <b>${title}</b>`,
-      `👤 Client: <b>${clientName}</b> · <code>${fmt(amount)} MDL</code>`,
-      `👤 Decis de: <b>${byName}</b>`,
+      `👤 Client: <b>${this.esc(clientName)}</b> · <code>${fmt(amount)} MDL</code>`,
+      `👤 Decis de: <b>${this.esc(byName)}</b>`,
+      div,
+    ].join('\n');
+  }
+
+  /** Mesaj trimis în grup când managerul anunță rezultatul final al contractului */
+  private buildContractOutcomeMessage(
+    outcome: 'SIGNED' | 'REFUSED',
+    byName: string,
+    clientName: string,
+    clientProduct: string,
+    amount: number,
+  ): string {
+    const div = '━━━━━━━━━━━━━━━━';
+    const fmt = (n: number) => n.toLocaleString('ro-MD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const title = outcome === 'SIGNED' ? '✍️  CONTRACT SEMNAT' : '🚫  CLIENT A REFUZAT';
+    return [
+      div,
+      `🔔 <b>${title}</b>`,
+      `👤 Client: <b>${this.esc(clientName)}</b> · <code>${fmt(amount)} MDL</code>`,
+      `📦 Produs: <code>${this.esc(clientProduct)}</code>`,
+      `👤 Manager: <b>${this.esc(byName)}</b>`,
+      `🕐 ${this.formatDate(new Date())}`,
       div,
     ].join('\n');
   }
 
   // ── Public methods ────────────────────────────────────────────────
+
+  async sendContractOutcome(
+    applicationId: string,
+    outcome: 'SIGNED' | 'REFUSED',
+    byName: string,
+    clientName: string,
+    clientProduct: string,
+    amount: number,
+    partnerTelegram?: PartnerTelegram,
+  ): Promise<boolean> {
+    const cfg = this.resolveConfig(partnerTelegram);
+    if (!cfg) return false;
+
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { telegramMessageId: true },
+    });
+
+    try {
+      await cfg.bot.sendMessage(
+        cfg.chatId,
+        this.buildContractOutcomeMessage(outcome, byName, clientName, clientProduct, amount),
+        {
+          parse_mode: 'HTML',
+          // Reply la mesajul de acțiuni al cererii, dacă există — păstrează contextul în grup
+          ...(app?.telegramMessageId ? { reply_to_message_id: Number(app.telegramMessageId) } : {}),
+        },
+      );
+      return true;
+    } catch (err: any) {
+      // reply_to poate eșua dacă mesajul original a fost șters — reîncearcă fără reply
+      try {
+        await cfg.bot.sendMessage(
+          cfg.chatId,
+          this.buildContractOutcomeMessage(outcome, byName, clientName, clientProduct, amount),
+          { parse_mode: 'HTML' },
+        );
+        return true;
+      } catch (retryErr: any) {
+        this.logger.error(`Telegram sendContractOutcome failed: ${retryErr.message}`);
+        return false;
+      }
+    }
+  }
 
   async sendApplication(
     application: ApplicationInfo,
@@ -240,7 +331,7 @@ export class TelegramService implements OnApplicationBootstrap {
     if (!data || !message) return;
 
     // Format: "action:appId" sau "action:appId:processorTelegramId"
-    const parts      = data.split(':');
+    const parts       = data.split(':');
     const action      = parts[0];
     const appId       = parts[1];
     const processorId = parts[2] ? parseInt(parts[2]) : null;
@@ -248,10 +339,10 @@ export class TelegramService implements OnApplicationBootstrap {
     if (!appId) return;
 
     const actionMap: Record<string, { status: string; answerText: string; sendConfirmation: boolean }> = {
-      proc: { status: 'PROCESSING', answerText: '⚙️ Preluat în analiză',  sendConfirmation: false },
-      aprv: { status: 'APPROVED',   answerText: '✅ Cerere aprobată',      sendConfirmation: true },
-      rejt: { status: 'REJECTED',   answerText: '❌ Cerere respinsă',      sendConfirmation: true },
-      cncl: { status: 'CANCELLED',  answerText: '🚫 Cerere anulată',       sendConfirmation: false },
+      proc: { status: 'PROCESSING', answerText: '⚙️ Preluat în analiză', sendConfirmation: false },
+      aprv: { status: 'APPROVED',   answerText: '✅ Cerere aprobată',     sendConfirmation: true },
+      rejt: { status: 'REJECTED',   answerText: '❌ Cerere respinsă',     sendConfirmation: true },
+      cncl: { status: 'CANCELLED',  answerText: '🚫 Cerere anulată',      sendConfirmation: false },
     };
 
     const bot    = new TelegramBot(token, { polling: false });
@@ -262,18 +353,45 @@ export class TelegramService implements OnApplicationBootstrap {
       return;
     }
 
-    // ── Verificare ownership ──────────────────────────────────────
-    // Dacă processorId e codificat în buton, doar el poate acționa
+    // ── Verificare ownership post-proc ────────────────────────────────────
+    // Dacă processorId e codificat în buton, doar el poate continua
     if (processorId && from.id !== processorId) {
+      const appInfo = await this.prisma.application.findUnique({
+        where:  { id: appId },
+        select: { statusChangedByName: true },
+      });
+      const name = appInfo?.statusChangedByName ?? 'alt coleg';
       await bot.answerCallbackQuery(queryId, {
-        text: '⛔ Această cerere este gestionată de alt coleg',
+        text: `⛔ Cererea este prelucrată de ${name}`,
         show_alert: true,
       }).catch(() => {});
       return;
     }
 
+    // ── Verificare autorizare pentru „Marchează în procesare" ─────────────
+    // Dacă partenerul are o listă de user ID-uri autorizate, verificăm
+    if (action === 'proc') {
+      const partner = await this.prisma.partner.findFirst({
+        where:  { applications: { some: { id: appId } } },
+        select: { telegramAllowedUserIds: true },
+      });
+      if (partner?.telegramAllowedUserIds) {
+        const allowed = partner.telegramAllowedUserIds
+          .split(',')
+          .map(s => parseInt(s.trim()))
+          .filter(n => !isNaN(n));
+        if (allowed.length > 0 && !allowed.includes(from.id)) {
+          await bot.answerCallbackQuery(queryId, {
+            text: '⛔ Nu ai permisiunea să preiei această cerere',
+            show_alert: true,
+          }).catch(() => {});
+          return;
+        }
+      }
+    }
+
     const app = await this.prisma.application.findUnique({
-      where: { id: appId },
+      where:  { id: appId },
       select: { status: true, clientFirstName: true, clientLastName: true, amount: true },
     });
 
@@ -292,10 +410,29 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const operatorName = [from.first_name, from.last_name].filter(Boolean).join(' ');
 
-    await this.prisma.application.update({
-      where: { id: appId },
-      data: { status: mapped.status as any, statusChangedByName: operatorName },
-    });
+    // ── Update atomic (previne race condition la proc) ────────────────────
+    let updated = false;
+    if (action === 'proc') {
+      const result = await this.prisma.application.updateMany({
+        where: { id: appId, status: 'PENDING' },
+        data:  { status: 'PROCESSING', statusChangedByName: operatorName },
+      });
+      updated = result.count > 0;
+    } else {
+      await this.prisma.application.update({
+        where: { id: appId },
+        data:  { status: mapped.status as any, statusChangedByName: operatorName },
+      });
+      updated = true;
+    }
+
+    if (!updated) {
+      await bot.answerCallbackQuery(queryId, {
+        text: '⚡ Cererea a fost deja preluată de altcineva',
+        show_alert: true,
+      }).catch(() => {});
+      return;
+    }
 
     await bot.answerCallbackQuery(queryId, { text: mapped.answerText }).catch(() => {});
 
@@ -303,8 +440,11 @@ export class TelegramService implements OnApplicationBootstrap {
     const nextProcessorId = action === 'proc' ? from.id : (processorId ?? undefined);
     const keyboard = this.buildKeyboard(mapped.status, appId, nextProcessorId);
 
+    // La PROCESSING — afișăm numele operatorului în mesajul de acțiuni
+    const processorNameInMsg = mapped.status === 'PROCESSING' ? operatorName : undefined;
+
     try {
-      await bot.editMessageText(this.buildActionText(mapped.status), {
+      await bot.editMessageText(this.buildActionText(mapped.status, undefined, processorNameInMsg), {
         chat_id:      message.chat.id,
         message_id:   message.message_id,
         parse_mode:   'HTML',
@@ -317,7 +457,7 @@ export class TelegramService implements OnApplicationBootstrap {
     // Mesaj de confirmare vizibil doar pentru decizii finale (Aprobat / Respins)
     if (mapped.sendConfirmation) {
       try {
-        const byName = [from.first_name, from.last_name].filter(Boolean).join(' ');
+        const byName     = [from.first_name, from.last_name].filter(Boolean).join(' ');
         const clientName = [app.clientFirstName, app.clientLastName].filter(Boolean).join(' ');
         await bot.sendMessage(
           message.chat.id,
