@@ -42,6 +42,9 @@ enum DocumentType {
   ID_BACK
   SELFIE
   OTHER
+  // Contractul de tipărit. Vine din AIONA, nu de la partener: acolo se
+  // întocmește, aici se descarcă pentru semnat cu clientul.
+  CONTRACT
 }
 
 // ─────────────────────────────────────────────

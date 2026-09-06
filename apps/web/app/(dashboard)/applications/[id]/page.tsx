@@ -32,7 +32,59 @@ const docTypeLabel: Record<string, string> = {
   ID_BACK:  'Verso buletin',
   SELFIE:   'Alte acte',
   OTHER:    'Alt document',
+  CONTRACT: 'Contract',
 };
+
+/**
+ * Contractul de tipărit.
+ *
+ * Vine din AIONA, unde îl încarcă administratorul — nu mai circulă pe Telegram.
+ * Se descarcă prin aceeaşi rută autentificată ca celelalte documente, deci
+ * verificarea drepturilor rămâne cea care exista: un partener vede doar
+ * documentele firmei lui.
+ */
+function ContractDownloadPanel({ app }: { app: any }) {
+  const [loading, setLoading] = useState(false);
+  const contract = app.documents?.find((d: any) => d.type === 'CONTRACT');
+  if (!contract) return null;
+
+  const descarca = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get(`/documents/${contract.id}/file`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Contract-${app.clientLastName}-${app.clientFirstName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="glass-card p-5">
+      <h2 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <FileText className="w-3.5 h-3.5 text-brand-400" /> Contract de tipărit
+      </h2>
+      <p className="text-sm text-white/60 mb-4">
+        Descarcă, tipăreşte şi semnează cu clientul. După aceea marchează mai jos
+        dacă a fost semnat sau refuzat.
+      </p>
+      <button
+        onClick={descarca}
+        disabled={loading}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-500/15 border border-brand-400/30 text-brand-300 text-sm font-semibold hover:bg-brand-500/25 disabled:opacity-60"
+      >
+        <FileText className="w-4 h-4" />
+        {loading ? 'Se descarcă…' : 'Descarcă contractul'}
+      </button>
+    </div>
+  );
+}
 
 // ── Document viewer (loads via authenticated request) ─────────────
 function DocThumb({ doc }: { doc: any }) {
@@ -599,13 +651,13 @@ export default function ApplicationDetailPage() {
           </motion.div>
 
           {/* Documents */}
-          {app.documents?.length > 0 && (
+          {app.documents?.filter((d: any) => d.type !== 'CONTRACT').length > 0 && (
             <motion.div className="glass-card p-5" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <h2 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <FileText className="w-3.5 h-3.5 text-brand-400" /> Documente Încărcate
               </h2>
               <div className="grid grid-cols-3 gap-3">
-                {app.documents.map((doc: any) => (
+                {app.documents.filter((d: any) => d.type !== 'CONTRACT').map((doc: any) => (
                   <DocThumb key={doc.id} doc={doc} />
                 ))}
               </div>
@@ -657,6 +709,9 @@ export default function ApplicationDetailPage() {
               <InfoRow label="Ultima modificare" value={formatDate(app.updatedAt)} mono={false} />
             </div>
           </motion.div>
+
+          {/* Contractul primit din AIONA — de tipărit şi semnat cu clientul */}
+          <ContractDownloadPanel app={app} />
 
           {/* Rezultat contract — vizibil după aprobare */}
           {(app.contractOutcome || canSendOutcome) && (

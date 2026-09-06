@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CalculatorService } from '../calculator/calculator.service';
 import { DocumentsService } from '../documents/documents.service';
 import { TelegramService } from '../notifications/telegram.service';
+import { AionaService } from '../aiona/aiona.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { DocumentType, Role } from '@prisma/client';
 
@@ -14,6 +15,7 @@ export class ApplicationsService {
     private readonly calculator: CalculatorService,
     private readonly documents: DocumentsService,
     private readonly telegram: TelegramService,
+    private readonly aiona: AionaService,
   ) {}
 
   async create(
@@ -109,6 +111,11 @@ export class ApplicationsService {
         data: { telegramMessageId: msgId },
       });
     }
+
+    // Cererea pleacă şi în AIONA. Fără await: dacă AIONA nu răspunde,
+    // partenerul nu trebuie să vadă o eroare la depunere — el stă în faţa
+    // clientului. Eşecul se recuperează la prima schimbare de status.
+    void this.aiona.trimite(application.id);
 
     return this.findOne(application.id, requestingUser);
   }
@@ -215,6 +222,7 @@ export class ApplicationsService {
       where: { id },
       data: { status: 'CANCELLED', statusChangedByName: `${requestingUser.firstName} ${requestingUser.lastName}` },
     });
+    void this.aiona.trimite(id);
 
     await this.telegram.sendStatusUpdate(id, 'CANCELLED', undefined, {
       token:   application.partner.telegramBotToken ?? undefined,
@@ -246,6 +254,7 @@ export class ApplicationsService {
       where: { id },
       data: { status: 'PENDING', telegramMessageId: null, statusChangedByName: `${requestingUser.firstName} ${requestingUser.lastName}` },
     });
+    void this.aiona.trimite(id);
 
     const docLabelMap: Record<string, string> = {
       ID_FRONT: '📋 Buletin de Identitate (față)',
@@ -579,6 +588,8 @@ export class ApplicationsService {
       chatId:  application.partner.telegramChatId   ?? undefined,
       enabled: application.partner.telegramEnabled,
     });
+
+    void this.aiona.trimite(id);
 
     return updated;
   }

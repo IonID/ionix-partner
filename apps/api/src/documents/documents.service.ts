@@ -76,6 +76,22 @@ export class DocumentsService {
     return resolved;
   }
 
+  /**
+   * Şterge documentele de un anumit tip ale unei cereri.
+   *
+   * Folosit la înlocuirea contractului: un contract nou îl scoate pe cel vechi,
+   * ca partenerul să tipărească ultima variantă, nu să aleagă între două.
+   */
+  async deleteByType(applicationId: string, type: DocumentType) {
+    const docs = await this.prisma.document.findMany({ where: { applicationId, type } });
+    for (const doc of docs) {
+      const fullPath = this.getAbsolutePath(doc.path);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    }
+    await this.prisma.document.deleteMany({ where: { applicationId, type } });
+    return docs.length;
+  }
+
   async deleteByApplication(applicationId: string) {
     const docs = await this.prisma.document.findMany({ where: { applicationId } });
     for (const doc of docs) {
