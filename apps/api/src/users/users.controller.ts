@@ -41,11 +41,14 @@ export class UsersController {
     return this.usersService.create(dto);
   }
 
-  @Patch(':id')
+  @Patch('partners/:partnerId/calculator')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: '[ADMIN] Actualizează utilizator' })
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  @ApiOperation({ summary: '[ADMIN] Configurează Calculator per partener' })
+  updatePartnerCalculator(
+    @Param('partnerId') partnerId: string,
+    @Body() body: { calculatorConfig: Record<string, any> | null },
+  ) {
+    return this.usersService.updatePartnerCalculator(partnerId, body.calculatorConfig);
   }
 
   @Patch('partners/:partnerId/telegram')
@@ -53,9 +56,16 @@ export class UsersController {
   @ApiOperation({ summary: '[ADMIN] Configurează Telegram per partener' })
   updatePartnerTelegram(
     @Param('partnerId') partnerId: string,
-    @Body() body: { telegramBotToken?: string; telegramChatId?: string; telegramEnabled?: boolean },
+    @Body() body: { telegramBotToken?: string; telegramChatId?: string; telegramEnabled?: boolean; telegramAllowedUserIds?: string },
   ) {
     return this.usersService.updatePartnerTelegram(partnerId, body);
+  }
+
+  @Patch(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: '[ADMIN] Actualizează utilizator' })
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
   }
 
   @Post('partners/:partnerId/logo')

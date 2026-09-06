@@ -37,13 +37,26 @@ const ZERO_COMMISSION_FALLBACK: Record<number, number> = {
 export class CalculatorService {
   constructor(private readonly settings: SettingsService) {}
 
-  async calculate(dto: CalculateDto, commissionRate: number): Promise<CalculationResult> {
+  async calculate(dto: CalculateDto, commissionRate: number, partnerConfig?: Record<string, any> | null): Promise<CalculationResult> {
     const { creditType, amount, months } = dto;
-    const s = await this.settings.getAll();
+    const globalSettings = await this.settings.getAll();
+    const s = this.mergeSettings(globalSettings, partnerConfig);
 
     return creditType === 'ZERO'
       ? this.calculateZero({ amount, months, s })
       : this.calculateClassic({ amount, months, commissionRate, s });
+  }
+
+  // Merge global settings with per-partner overrides (partner takes precedence)
+  private mergeSettings(global: Record<string, string>, partner?: Record<string, any> | null): Record<string, string> {
+    if (!partner || Object.keys(partner).length === 0) return global;
+    const overrides: Record<string, string> = {};
+    for (const [k, v] of Object.entries(partner)) {
+      if (v !== null && v !== undefined && v !== '') {
+        overrides[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+    }
+    return { ...global, ...overrides };
   }
 
   // ─────────────────────────────────────────────────────────────────

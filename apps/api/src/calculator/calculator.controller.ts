@@ -26,8 +26,9 @@ export class CalculatorController {
   ) {
     const ip = (req.headers['x-forwarded-for'] as string) || req.ip || 'unknown';
     const commissionRate = user.partner?.commissionRate ?? 0;
+    const partnerConfig = (user.partner?.calculatorConfig ?? null) as Record<string, any> | null;
 
-    const result = await this.calculatorService.calculate(dto, commissionRate);
+    const result = await this.calculatorService.calculate(dto, commissionRate, partnerConfig);
 
     await this.auditService.log({
       userId: user.id,

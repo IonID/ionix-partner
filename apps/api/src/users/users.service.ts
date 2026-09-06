@@ -38,11 +38,13 @@ export class UsersService {
       select: {
         id: true,
         companyName: true,
+        commissionRate: true,
         logoPath: true,
         calculatorConfig: true,
         telegramBotToken: true,
         telegramChatId: true,
         telegramEnabled: true,
+        telegramAllowedUserIds: true,
         users: {
           select: { id: true, firstName: true, lastName: true, email: true, username: true, role: true, isActive: true },
           orderBy: { createdAt: 'asc' as const },
@@ -85,6 +87,10 @@ export class UsersService {
     if (dto.username) {
       const usernameExists = await this.prisma.user.findUnique({ where: { username: dto.username } });
       if (usernameExists) throw new ConflictException('Username deja înregistrat');
+    }
+
+    if (!dto.email && !dto.username) {
+      throw new BadRequestException('Cel puțin email sau username trebuie specificat');
     }
 
     if (dto.partner && dto.partnerId) {
@@ -198,7 +204,7 @@ export class UsersService {
 
   async updatePartnerTelegram(
     partnerId: string,
-    dto: { telegramBotToken?: string; telegramChatId?: string; telegramEnabled?: boolean },
+    dto: { telegramBotToken?: string; telegramChatId?: string; telegramEnabled?: boolean; telegramAllowedUserIds?: string },
   ) {
     const partner = await this.prisma.partner.findUnique({ where: { id: partnerId } });
     if (!partner) throw new NotFoundException('Partenerul nu a fost găsit');
@@ -206,11 +212,24 @@ export class UsersService {
     return this.prisma.partner.update({
       where: { id: partnerId },
       data: {
-        telegramBotToken: dto.telegramBotToken ?? null,
-        telegramChatId:   dto.telegramChatId   ?? null,
+        telegramBotToken:       dto.telegramBotToken ?? null,
+        telegramChatId:         dto.telegramChatId   ?? null,
         ...(dto.telegramEnabled !== undefined && { telegramEnabled: dto.telegramEnabled }),
+        ...(dto.telegramAllowedUserIds !== undefined && {
+          telegramAllowedUserIds: dto.telegramAllowedUserIds.trim() || null,
+        }),
       },
-      select: { id: true, telegramBotToken: true, telegramChatId: true, telegramEnabled: true },
+      select: { id: true, telegramBotToken: true, telegramChatId: true, telegramEnabled: true, telegramAllowedUserIds: true },
+    });
+  }
+
+  async updatePartnerCalculator(partnerId: string, calculatorConfig: Record<string, any> | null) {
+    const partner = await this.prisma.partner.findUnique({ where: { id: partnerId } });
+    if (!partner) throw new NotFoundException('Partenerul nu a fost găsit');
+    return this.prisma.partner.update({
+      where: { id: partnerId },
+      data: { calculatorConfig: calculatorConfig as any },
+      select: { id: true, calculatorConfig: true },
     });
   }
 
