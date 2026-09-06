@@ -33,7 +33,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       role:      user.role,
       partnerId: user.partner?.id ?? null,
       partner:   user.partner
-        ? { id: user.partner.id, companyName: user.partner.companyName, logoPath: user.partner.logoPath ?? null }
+        ? {
+            id:               user.partner.id,
+            companyName:      user.partner.companyName,
+            logoPath:         user.partner.logoPath ?? null,
+            commissionRate:   (user.partner as any).commissionRate ?? 0,
+            calculatorConfig: (user.partner as any).calculatorConfig ?? null,
+          }
         : null,
     };
   }

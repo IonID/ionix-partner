@@ -24,11 +24,15 @@ export class AuthService {
 
   // ── Login ─────────────────────────────────────────────────────────
   async login(dto: LoginDto, ipAddress: string) {
-    // Email contains '@' → system user (ADMIN/VIEWER); altfel → username partener
+    // Email contains '@' → try email first, fallback to username (handles @-usernames)
     const isEmail = dto.credential.includes('@');
-    const user = isEmail
+    let user = isEmail
       ? await this.usersService.findByEmail(dto.credential)
       : await this.usersService.findByUsername(dto.credential);
+
+    if (!user && isEmail) {
+      user = await this.usersService.findByUsername(dto.credential);
+    }
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Credențiale invalide');
@@ -126,8 +130,10 @@ export class AuthService {
   }
 
   private async storeRefreshToken(userId: string, token: string, ipAddress: string) {
+    const expiry = this.config.get<string>('JWT_REFRESH_EXPIRY', '7d');
+    const days = expiry.endsWith('d') ? parseInt(expiry) : 7;
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + days);
 
     await this.prisma.refreshToken.create({
       data: { token, userId, expiresAt, ipAddress },
