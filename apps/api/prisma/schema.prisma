@@ -106,9 +106,10 @@ model Partner {
   calculatorConfig Json?
 
   // Per-partner Telegram (overrides global settings)
-  telegramBotToken  String?
-  telegramChatId    String?
-  telegramEnabled   Boolean @default(true)
+  telegramBotToken       String?
+  telegramChatId         String?
+  telegramEnabled        Boolean @default(true)
+  telegramAllowedUserIds String?  // comma-separated Telegram user IDs allowed to process; null = all allowed
 
   users          User[]
   applications   Application[]
@@ -152,11 +153,20 @@ model Application {
   dae            Decimal   @db.Decimal(6, 2)   // Annual Effective Rate %
   commissionAmount Decimal @db.Decimal(12, 2) @default(0)
 
+  // ── Extra fields ─────────────────────────────
+  paymentDate  DateTime?  // data de plată aleasă de client
+  comments     String?    // observații opționale ale partenerului
+
   // ── Lifecycle ────────────────────────────────
   status               ApplicationStatus @default(PENDING)
   telegramMessageId    String?
   processorNotes       String?
   rejectionReason      String?
+
+  // ── Rezultat final contract (după aprobare) ──
+  contractOutcome       String?    // SIGNED | REFUSED — setat de managerul care a depus cererea
+  contractOutcomeByName String?
+  contractOutcomeAt     DateTime?
 
   documents    Document[]
   createdAt    DateTime   @default(now())
