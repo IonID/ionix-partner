@@ -1,7 +1,8 @@
 import {
-  BadRequestException, Controller, Headers, NotFoundException, Param, Post,
+  BadRequestException, Controller, Get, Headers, NotFoundException, Param, Post,
   UnauthorizedException, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
+import * as fs from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,6 +30,43 @@ export class AionaContractController {
     private readonly telegram: TelegramService,
   ) {}
 
+  /**
+   * Actele clientului, cerute de AIONA.
+   *
+   * Se trimit la cerere, nu se copiază: buletinul rămâne într-un singur loc, la
+   * noi. AIONA îl arată în fişă şi îl uită. Aceleaşi acte în două baze ar
+   * însemna două locuri de apărat şi două de curăţat când clientul cere
+   * ştergerea.
+   */
+  private verificaSecretul(secret?: string) {
+    const asteptat = (process.env.IONIX_SECRET ?? '').trim();
+    if (!asteptat) throw new BadRequestException('IONIX_SECRET nu e configurat.');
+    if ((secret ?? '').trim() !== asteptat) throw new UnauthorizedException('Secret invalid.');
+  }
+
+  @Get(':id/documents')
+  async documente(@Param('id') id: string, @Headers('x-ionix-secret') secret?: string) {
+    this.verificaSecretul(secret);
+    const docs = await this.prisma.document.findMany({
+      where: { applicationId: id, type: { in: ['ID_FRONT', 'ID_BACK', 'SELFIE', 'OTHER'] } },
+      orderBy: { type: 'asc' },
+    });
+    const iesire: any[] = [];
+    for (const d of docs) {
+      const cale = this.documents.getAbsolutePath(d.path);
+      if (!fs.existsSync(cale)) continue;
+      iesire.push({
+        id: d.id,
+        // AIONA numeşte feţele buletinului FRONT/BACK; noi ID_FRONT/ID_BACK.
+        kind: d.type === 'ID_FRONT' ? 'FRONT' : d.type === 'ID_BACK' ? 'BACK' : d.type,
+        mimeType: d.mimeType,
+        data: fs.readFileSync(cale).toString('base64'),
+        createdAt: d.createdAt,
+      });
+    }
+    return iesire;
+  }
+
   @Post(':id/contract')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async primesteContract(
@@ -36,9 +74,7 @@ export class AionaContractController {
     @UploadedFile() file?: Express.Multer.File,
     @Headers('x-ionix-secret') secret?: string,
   ) {
-    const asteptat = (process.env.IONIX_SECRET ?? '').trim();
-    if (!asteptat) throw new BadRequestException('IONIX_SECRET nu e configurat.');
-    if ((secret ?? '').trim() !== asteptat) throw new UnauthorizedException('Secret invalid.');
+    this.verificaSecretul(secret);
     if (!file) throw new BadRequestException('Lipseşte fişierul.');
     if (file.mimetype !== 'application/pdf') throw new BadRequestException('Contractul trebuie să fie PDF.');
 

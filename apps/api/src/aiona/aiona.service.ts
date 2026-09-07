@@ -1,4 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -18,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AionaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AionaService.name);
   private ceas?: NodeJS.Timeout;
+  private ceasRetentie?: NodeJS.Timeout;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -32,6 +35,11 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
    * repetarea nu strică nimic, iar o pană de câteva minute se repară singură.
    */
   onModuleInit() {
+    // Curăţarea actelor merge indiferent dacă integrarea cu AIONA e pornită:
+    // ţine de protecţia datelor, nu de legătura dintre aplicaţii.
+    this.ceasRetentie = setInterval(() => void this.curataActele(), 6 * 60 * 60 * 1000);
+    setTimeout(() => void this.curataActele(), 60_000);
+
     if (!this.config.activ) return;
     // La pornire luăm o fereastră largă: dacă am fost opriţi o zi, o recuperăm.
     setTimeout(() => void this.recupereaza(7 * 24 * 60), 20_000);
@@ -40,6 +48,36 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     if (this.ceas) clearInterval(this.ceas);
+    if (this.ceasRetentie) clearInterval(this.ceasRetentie);
+  }
+
+  /**
+   * Actele de identitate se şterg după cinci zile.
+   *
+   * Aceeaşi regulă ca în AIONA: buletinul e cerut ca să se verifice clientul la
+   * depunere, nu ca să stea la noi. După ce cererea şi-a urmat cursul, poza n-are
+   * de ce să rămână — iar ce nu se păstrează nu se poate pierde.
+   *
+   * Contractul nu intră aici: partenerul îl tipăreşte şi îl semnează, uneori
+   * după mai mult de cinci zile.
+   */
+  private async curataActele(): Promise<void> {
+    try {
+      const limita = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+      const vechi = await this.prisma.document.findMany({
+        where: { createdAt: { lt: limita }, type: { in: ['ID_FRONT', 'ID_BACK', 'SELFIE'] } },
+        select: { id: true, path: true },
+      });
+      if (!vechi.length) return;
+      for (const d of vechi) {
+        const cale = path.join(process.env.UPLOAD_DIR ?? './uploads', d.path);
+        try { if (fs.existsSync(cale)) fs.unlinkSync(cale); } catch { /* fişierul lipseşte deja */ }
+      }
+      await this.prisma.document.deleteMany({ where: { id: { in: vechi.map((d) => d.id) } } });
+      this.logger.log(`Retenţie: şterse ${vechi.length} acte de identitate mai vechi de 5 zile`);
+    } catch (e: any) {
+      this.logger.warn(`Curăţarea actelor a eşuat: ${e?.message ?? e}`);
+    }
   }
 
   /** Retrimite cererile atinse în ultimele `minute`. */
