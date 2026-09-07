@@ -6,6 +6,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocumentsService } from '../documents/documents.service';
+import { TelegramService } from '../notifications/telegram.service';
 
 /**
  * Contractul trimis de AIONA pentru o cerere.
@@ -25,6 +26,7 @@ export class AionaContractController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documents: DocumentsService,
+    private readonly telegram: TelegramService,
   ) {}
 
   @Post(':id/contract')
@@ -48,6 +50,12 @@ export class AionaContractController {
     await this.documents.deleteByType(id, 'CONTRACT');
 
     const doc = await this.documents.saveFile(file, id, 'CONTRACT');
+
+    // Partenerul află din Telegram că are ce tipări. Fără await: dacă botul lui
+    // e oprit sau prost configurat, contractul tot a ajuns — nu are rost să
+    // răspundem cu eroare către AIONA pentru un anunţ neplecat.
+    void this.telegram.sendContractReady(id);
+
     return { id: doc.id, received: true };
   }
 }

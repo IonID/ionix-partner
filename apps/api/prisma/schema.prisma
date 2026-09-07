@@ -135,6 +135,9 @@ model Application {
   createdByUser        User?   @relation("CreatedApplications", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   statusChangedByName  String?   // name of whoever last changed the status (web user or Telegram operator)
+  /// Porecla de Telegram a operatorului. AIONA o foloseşte ca să găsească
+  /// utilizatorul ei şi să arate numele adevărat, nu cum şi-a scris el contul.
+  statusChangedByTelegramUsername String?
 
   // ── Client personal data ────────────────────
   clientFirstName  String

@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DocumentsModule } from '../documents/documents.module';
-import { AionaService } from './aiona.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AionaContractController } from './aiona-contract.controller';
 
+/** Primirea contractului din AIONA şi anunţul către partener. */
 @Module({
-  imports: [PrismaModule, DocumentsModule],
+  imports: [PrismaModule, DocumentsModule, NotificationsModule],
   controllers: [AionaContractController],
-  providers: [AionaService],
-  exports: [AionaService],
 })
 export class AionaModule {}

@@ -290,6 +290,43 @@ export class TelegramService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Anunţă partenerul că i-a venit contractul de tipărit.
+   *
+   * Până acum contractul se trimitea de mână, pe Telegram, ca fişier. De când
+   * îl încarcă administratorul în AIONA, partenerul n-ar avea de unde şti că a
+   * apărut — de aceea îi spunem aici şi îl trimitem în aplicaţie, unde e.
+   */
+  async sendContractReady(applicationId: string): Promise<void> {
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      include: { partner: true },
+    });
+    if (!app?.partner) return;
+    const cfg = this.resolveConfig({
+      token: app.partner.telegramBotToken ?? undefined,
+      chatId: app.partner.telegramChatId ?? undefined,
+      enabled: app.partner.telegramEnabled,
+    });
+    if (!cfg) return;
+
+    const text = [
+      '📄 <b>CONTRACT PREGĂTIT</b>',
+      '',
+      `• <b>Client:</b> <code>${this.esc(app.clientFirstName)} ${this.esc(app.clientLastName)}</code>`,
+      `• <b>Suma:</b> <code>${this.esc(Number(app.amount).toFixed(2))} MDL</code>`,
+      '',
+      'Descarcă-l din Ionix, de pe fişa cererii, tipăreşte-l şi semnează-l cu',
+      'clientul. După aceea marchează acolo dacă a fost semnat sau refuzat.',
+    ].join('\n');
+
+    try {
+      await cfg.bot.sendMessage(cfg.chatId, text, { parse_mode: 'HTML' });
+    } catch (e: any) {
+      this.logger.warn(`Anunţul de contract n-a plecat: ${e?.message ?? e}`);
+    }
+  }
+
   async sendStatusUpdate(
     applicationId: string,
     status: string,
@@ -327,7 +364,7 @@ export class TelegramService implements OnApplicationBootstrap {
       id: string;
       message?: { chat: { id: number }; message_id: number };
       data?: string;
-      from: { id: number; first_name: string; last_name?: string };
+      from: { id: number; first_name: string; last_name?: string; username?: string };
     };
 
     if (!data || !message) return;
@@ -417,13 +454,13 @@ export class TelegramService implements OnApplicationBootstrap {
     if (action === 'proc') {
       const result = await this.prisma.application.updateMany({
         where: { id: appId, status: 'PENDING' },
-        data:  { status: 'PROCESSING', statusChangedByName: operatorName },
+        data:  { status: 'PROCESSING', statusChangedByName: operatorName, statusChangedByTelegramUsername: from.username ?? null },
       });
       updated = result.count > 0;
     } else {
       await this.prisma.application.update({
         where: { id: appId },
-        data:  { status: mapped.status as any, statusChangedByName: operatorName },
+        data:  { status: mapped.status as any, statusChangedByName: operatorName, statusChangedByTelegramUsername: from.username ?? null },
       });
       updated = true;
     }

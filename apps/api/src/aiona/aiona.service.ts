@@ -101,6 +101,11 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
           status: a.status,
           comments: a.comments ?? undefined,
           statusChangedByName: a.statusChangedByName ?? undefined,
+          // Porecla de Telegram a operatorului. AIONA o foloseşte ca să
+          // găsească utilizatorul ei şi să arate numele adevărat, nu porecla.
+          statusChangedByTelegram: a.statusChangedByTelegramUsername ?? undefined,
+          contractOutcome: a.contractOutcome ?? undefined,
+          contractOutcomeAt: a.contractOutcomeAt ? a.contractOutcomeAt.toISOString() : undefined,
         }),
       });
 
