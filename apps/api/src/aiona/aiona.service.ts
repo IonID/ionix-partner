@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -15,10 +15,50 @@ import { PrismaService } from '../prisma/prisma.service';
  * prima schimbare de status, fără intervenţie.
  */
 @Injectable()
-export class AionaService {
+export class AionaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AionaService.name);
+  private ceas?: NodeJS.Timeout;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Trimiterea la depunere sau la schimbarea statusului acoperă cazul obişnuit.
+   * Nu acoperă cazul în care AIONA e oprit exact atunci, iar cererea nu se mai
+   * atinge niciodată după — s-a întâmplat pe 07.09.2026 şi cererea a rămas
+   * nevăzută până am observat-o cu ochiul.
+   *
+   * De aceea mai trece o dată la fiecare zece minute peste ce s-a schimbat
+   * recent. Trimiterea e idempotentă — AIONA actualizează după id — deci
+   * repetarea nu strică nimic, iar o pană de câteva minute se repară singură.
+   */
+  onModuleInit() {
+    if (!this.config.activ) return;
+    // La pornire luăm o fereastră largă: dacă am fost opriţi o zi, o recuperăm.
+    setTimeout(() => void this.recupereaza(7 * 24 * 60), 20_000);
+    this.ceas = setInterval(() => void this.recupereaza(30), 10 * 60 * 1000);
+  }
+
+  onModuleDestroy() {
+    if (this.ceas) clearInterval(this.ceas);
+  }
+
+  /** Retrimite cererile atinse în ultimele `minute`. */
+  private async recupereaza(minute: number): Promise<void> {
+    try {
+      const de_la = new Date(Date.now() - minute * 60_000);
+      const cereri = await this.prisma.application.findMany({
+        where: { updatedAt: { gte: de_la } },
+        select: { id: true },
+        orderBy: { updatedAt: 'asc' },
+        take: 200,
+      });
+      if (!cereri.length) return;
+      for (const c of cereri) await this.trimite(c.id);
+      this.logger.log(`Recuperare: ${cereri.length} cereri retrimise către AIONA`);
+    } catch (e: any) {
+      this.logger.warn(`Recuperarea a eşuat: ${e?.message ?? e}`);
+    }
+  }
 
   private get config() {
     const url = (process.env.AIONA_API_URL ?? '').replace(/\/+$/, '');

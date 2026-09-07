@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { AionaService } from '../aiona/aiona.service';
 import TelegramBot = require('node-telegram-bot-api');
 import * as fs from 'fs';
 
@@ -38,6 +39,7 @@ export class TelegramService implements OnApplicationBootstrap {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly aiona: AionaService,
   ) {}
 
   onApplicationBootstrap() {
@@ -433,6 +435,12 @@ export class TelegramService implements OnApplicationBootstrap {
       }).catch(() => {});
       return;
     }
+
+    // Statusul se schimbă aici direct în bază, nu prin ApplicationsService —
+    // deci trimiterea către AIONA trebuie chemată şi de pe calea asta. Fără
+    // ea, cererile prelucrate din Telegram (adică majoritatea) nu ajungeau
+    // niciodată acolo. Verificat pe 07.09.2026, pe o cerere reală.
+    void this.aiona.trimite(appId);
 
     await bot.answerCallbackQuery(queryId, { text: mapped.answerText }).catch(() => {});
 
