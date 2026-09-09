@@ -78,6 +78,60 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
     } catch (e: any) {
       this.logger.warn(`Curăţarea actelor a eşuat: ${e?.message ?? e}`);
     }
+
+    await this.curataOrfanele();
+  }
+
+  /**
+   * Fişierele rămase fără rând în bază.
+   *
+   * Ştergerea de mai sus scoate fişierul doar dacă are rând. Ce rămâne pe disc
+   * fără rând — după o recreare de container, un import, o ştergere manuală —
+   * nu se mai vede nicăieri şi nu-l mai şterge nimeni niciodată. Pe 09.09.2026
+   * erau 784 de asemenea fişiere, un gigabyte de buletine de clienţi fără nicio
+   * evidenţă. Pentru date de identitate, asta nu e doar dezordine.
+   *
+   * Se şterg doar cele mai vechi de cinci zile: un fişier apărut acum două ore
+   * fără rând poate fi o încărcare în curs, nu un rest.
+   */
+  private async curataOrfanele(): Promise<void> {
+    const radacina = path.resolve(process.env.UPLOAD_DIR ?? './uploads');
+    try {
+      if (!fs.existsSync(radacina)) return;
+      const randuri = await this.prisma.document.findMany({ select: { path: true } });
+      const cunoscute = new Set(randuri.map((d) => path.resolve(radacina, d.path)));
+      const prag = Date.now() - 5 * 24 * 60 * 60 * 1000;
+
+      let sterse = 0;
+      const parcurge = (dir: string) => {
+        for (const intrare of fs.readdirSync(dir, { withFileTypes: true })) {
+          const cale = path.join(dir, intrare.name);
+          if (intrare.isDirectory()) { parcurge(cale); continue; }
+          if (cunoscute.has(cale)) continue;
+          try {
+            if (fs.statSync(cale).mtimeMs >= prag) continue;
+            fs.unlinkSync(cale);
+            sterse++;
+          } catch { /* şters între timp de altcineva */ }
+        }
+      };
+      parcurge(radacina);
+
+      // Directoarele rămase goale n-au ce căuta acolo.
+      const golesteDirectoare = (dir: string) => {
+        for (const intrare of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (intrare.isDirectory()) golesteDirectoare(path.join(dir, intrare.name));
+        }
+        if (dir !== radacina && fs.readdirSync(dir).length === 0) {
+          try { fs.rmdirSync(dir); } catch { /* nu e gol între timp */ }
+        }
+      };
+      golesteDirectoare(radacina);
+
+      if (sterse) this.logger.log(`Retenţie: şterse ${sterse} fişiere orfane mai vechi de 5 zile`);
+    } catch (e: any) {
+      this.logger.warn(`Curăţarea orfanelor a eşuat: ${e?.message ?? e}`);
+    }
   }
 
   /** Retrimite cererile atinse în ultimele `minute`. */
