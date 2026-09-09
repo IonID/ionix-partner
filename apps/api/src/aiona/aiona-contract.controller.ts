@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Controller, Get, Headers, NotFoundException, Param, Post,
+  BadRequestException, Body, Controller, Get, Headers, NotFoundException, Param, Post,
   UnauthorizedException, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import * as fs from 'fs';
@@ -65,6 +65,56 @@ export class AionaContractController {
       });
     }
     return iesire;
+  }
+
+  /**
+   * Statusul, venit din AIONA.
+   *
+   * Îl scriem direct, nu prin ApplicationsService: acolo fiecare schimbare
+   * trimite starea înapoi în AIONA, iar de aici ar începe un du-te-vino fără
+   * sfârşit — ei ne spun, noi le spunem, ei ne spun. Ce vine dinspre AIONA
+   * rămâne la noi.
+   *
+   * Blocarea funcţionează de la sine: butonul „preia" din Telegram merge doar
+   * pe cereri în aşteptare, deci o cerere luată în AIONA nu mai poate fi luată
+   * şi acolo.
+   */
+  @Post(':id/status')
+  async primesteStatus(
+    @Param('id') id: string,
+    @Body() body: { status?: string; changedByName?: string },
+    @Headers('x-ionix-secret') secret?: string,
+  ) {
+    this.verificaSecretul(secret);
+    const permise = ['PENDING', 'PROCESSING', 'APPROVED', 'REJECTED', 'CANCELLED'];
+    const status = String(body?.status ?? '').toUpperCase();
+    if (!permise.includes(status)) throw new BadRequestException('Status necunoscut.');
+
+    const app = await this.prisma.application.findUnique({
+      where: { id },
+      include: { partner: true },
+    });
+    if (!app) throw new NotFoundException('Cererea nu există.');
+    if (app.status === status) return { ok: true, neschimbat: true };
+
+    await this.prisma.application.update({
+      where: { id },
+      data: {
+        status: status as any,
+        statusChangedByName: body?.changedByName?.trim() || 'AIONA',
+        statusChangedByTelegramUsername: null,
+      },
+    });
+
+    // Cardul din grup arată noua stare. Fără await: dacă botul partenerului e
+    // oprit, schimbarea s-a făcut oricum.
+    void this.telegram.sendStatusUpdate(id, status, undefined, {
+      token: app.partner?.telegramBotToken ?? undefined,
+      chatId: app.partner?.telegramChatId ?? undefined,
+      enabled: app.partner?.telegramEnabled,
+    });
+
+    return { ok: true };
   }
 
   @Post(':id/contract')
