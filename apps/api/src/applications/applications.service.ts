@@ -348,7 +348,7 @@ export class ApplicationsService {
       throw new BadRequestException('Mesajul nu a putut fi trimis în grupul Telegram — verifică configurarea');
     }
 
-    return this.prisma.application.update({
+    const updated = await this.prisma.application.update({
       where: { id },
       data: {
         contractOutcome:       outcome,
@@ -356,6 +356,14 @@ export class ApplicationsService {
         contractOutcomeAt:     new Date(),
       },
     });
+
+    // Fără rândul acesta, semnătura ajungea în AIONA abia la măturarea de la
+    // fiecare 10 minute — singurul loc din cinci unde cererea se schimbă şi
+    // AIONA nu era anunţată pe loc. Observat pe 14.09.2026: contractul apărea
+    // „Spre semnare" mult după ce fusese semnat.
+    void this.aiona.trimite(id);
+
+    return updated;
   }
 
   private async assertPartnerAccess(application: any, requestingUser: any, action: string) {
