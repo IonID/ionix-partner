@@ -5,11 +5,12 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, Eye, CheckCircle, Clock, XCircle,
+  Plus, Search, CheckCircle, Clock, XCircle,
   ChevronDown, Download, Trash2, AlertTriangle, SlidersHorizontal, X, Calendar,
   PenLine, Send,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
 import { formatMDL, formatDate } from '@/lib/utils';
@@ -210,6 +211,7 @@ function QuickStatusSelect({ appId, currentStatus }: { appId: string; currentSta
 // ── Main page ─────────────────────────────────────────────────────────
 export default function ApplicationsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -798,6 +800,9 @@ export default function ApplicationsPage() {
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
+                      onClick={() => router.push(`/applications/${app.id}`)}
+                      className="cursor-pointer transition-colors hover:bg-white/[.04]"
+                      title="Deschide fișa cererii"
                     >
                       <td>
                         <div className="font-medium text-white truncate max-w-[130px] sm:max-w-none">{app.clientFirstName} {app.clientLastName}</div>
@@ -838,10 +843,10 @@ export default function ApplicationsPage() {
                       </td>
                       <td className="hidden md:table-cell text-white/40 text-xs">{formatDate(app.createdAt)}</td>
                       <td>
-                        <div className="flex items-center gap-1">
-                          <Link href={`/applications/${app.id}`} className="btn-ghost px-2 py-1.5">
-                            <Eye className="w-3.5 h-3.5" />
-                          </Link>
+                        {/* Fişa se deschide apăsând rândul. Butoanele de aici fac
+                            altceva, deci opresc apăsarea să urce mai departe —
+                            altfel „şterge" ar şi deschide fişa în acelaşi timp. */}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {app.status === 'APPROVED' && !app.contractOutcome &&
                             user?.role !== 'VIEWER' && (
                             <>
