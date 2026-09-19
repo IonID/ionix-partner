@@ -1,21 +1,10 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google'; // Importăm fonturile oficial
+// Fonturile stau în proiect, nu se mai iau de pe internet la fiecare build:
+// sub emulare ARM64 descărcarea lor expira şi build-ul rămânea în reîncercări.
+// Vezi `app/fonts/fonts.css`.
+import './fonts/fonts.css';
 import './globals.css';
 import { Providers } from '@/components/Providers';
-
-// Configurăm fontul Inter (pentru text general)
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-});
-
-// Configurăm JetBrains Mono (pentru cod sau cifre, dacă folosești)
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-mono',
-});
 
 export const metadata: Metadata = {
   title: { default: 'Ionix Partner', template: '%s — Ionix Partner' },
@@ -37,8 +26,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ro" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className={inter.className}>
+    <html lang="ro" suppressHydrationWarning>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>
