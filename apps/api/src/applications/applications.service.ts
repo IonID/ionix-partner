@@ -18,6 +18,31 @@ export class ApplicationsService {
     private readonly aiona: AionaService,
   ) {}
 
+  /**
+   * Data de plată, verificată să nu fie din trecut.
+   *
+   * Câmpul e un calendar fără limite, iar pe 18.09.2026 a venit o cerere cu
+   * „Data plată: 04.10.1990" — data naşterii clientului, pusă din greşeală
+   * acolo. Nimic n-o oprea. O zi de răgaz în urmă, ca fusul orar al serverului
+   * să nu respingă o cerere trimisă noaptea.
+   */
+  private dataDePlata(valoare?: string | null): Date | null {
+    if (!valoare) return null;
+    const d = new Date(valoare);
+    if (isNaN(d.getTime())) return null;
+
+    const ieri = new Date();
+    ieri.setHours(0, 0, 0, 0);
+    ieri.setDate(ieri.getDate() - 1);
+    if (d < ieri) {
+      throw new BadRequestException(
+        'Data de plată nu poate fi în trecut. Dacă ai vrut data naşterii, acela e alt câmp.',
+      );
+    }
+    return d;
+  }
+
+
   async create(
     dto: CreateApplicationDto,
     files: Record<string, Express.Multer.File[]>,
@@ -57,7 +82,7 @@ export class ApplicationsService {
         totalAmount:     calc.totalAmount,
         dae:             calc.dae,
         commissionAmount: dto.creditType === 'ZERO' ? 0 : calc.commissionAmount,
-        paymentDate:     dto.paymentDate ? new Date(dto.paymentDate) : null,
+        paymentDate:     this.dataDePlata(dto.paymentDate),
         comments:        dto.comments ?? null,
       },
     });

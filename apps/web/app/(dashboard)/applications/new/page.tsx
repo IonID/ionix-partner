@@ -20,7 +20,14 @@ const schema = z.object({
   clientFirstName: z.string().min(2, 'Prenumele este obligatoriu'),
   clientLastName:  z.string().min(2, 'Numele este obligatoriu'),
   clientPhone:     z.string().min(8, 'Telefonul este obligatoriu'),
-  clientProduct:   z.string().min(2, 'Denumirea produsului este obligatorie'),
+  clientProduct:   z.string()
+    .min(3, 'Denumirea produsului este obligatorie')
+    // „@." trecea de vechea verificare, iar produsul adevărat ajungea la
+    // Comentarii. Cerem litere, nu semne.
+    // Lista de litere scrisă pe faţă: `\p{L}` cere o ţintă mai nouă decât are
+    // proiectul, iar compilarea pică.
+    .refine((v) => (v.match(/[A-Za-zĂÂÎȘȚŞŢăâîșțşţ]/g) ?? []).length >= 2,
+            'Scrie denumirea produsului, nu un semn'),
   paymentDate:     z.string().optional(),
   comments:        z.string().optional(),
 });
@@ -228,6 +235,9 @@ function NewApplicationInner() {
                 <input
                   {...register('paymentDate')}
                   type="date"
+                  /* Fără limită, aici se nimerea data naşterii clientului — a
+                     venit o cerere cu „Data plată: 04.10.1990". */
+                  min={new Date().toISOString().slice(0, 10)}
                   className="ionix-input"
                   style={{ colorScheme: 'dark' }}
                 />

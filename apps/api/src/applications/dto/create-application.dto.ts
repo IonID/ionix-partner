@@ -1,6 +1,6 @@
 import {
   IsString, IsEnum, IsNumber, IsPositive, IsInt, Min, Max, MinLength,
-  IsOptional, IsDateString,
+  IsOptional, IsDateString, Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreditType } from '@prisma/client';
@@ -21,9 +21,16 @@ export class CreateApplicationDto {
   @MinLength(8)
   clientPhone: string;
 
+  /**
+   * Cerea doar două caractere, şi trecea „@." — partenerii îl săreau şi scriau
+   * produsul adevărat la Comentarii, iar pe cartela din Telegram apărea
+   * „Produs: @.". Acum se cer trei caractere şi cel puţin două litere, deci un
+   * semn singur nu mai e de ajuns.
+   */
   @ApiProperty({ example: 'Laptop Lenovo IdeaPad', description: 'Produsul pe care îl cumpără clientul' })
   @IsString()
-  @MinLength(2)
+  @MinLength(3)
+  @Matches(/(\p{L}.*){2}/u, { message: 'Denumirea produsului trebuie să conţină cel puţin două litere.' })
   clientProduct: string;
 
   @ApiProperty({ enum: CreditType })
