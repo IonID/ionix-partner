@@ -3,17 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AionaService } from '../aiona/aiona.service';
 import TelegramBot = require('node-telegram-bot-api');
-import * as fs from 'fs';
 
 interface PartnerTelegram {
   token?: string | null;
   chatId?: string | null;
   enabled?: boolean;
-}
-
-interface FileAttachment {
-  path: string;
-  label: string;
 }
 
 interface ApplicationInfo {
@@ -251,10 +245,21 @@ export class TelegramService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Cartela cererii, pe Telegram — fără actele clientului.
+   *
+   * Până pe 19.09.2026 plecau odată cu ea şi buletinul, şi celelalte acte.
+   * Nu mai e nevoie: AIONA le cere direct de la noi, prin
+   * `GET /partener/applications/:id/documents`, şi le arată în fişă. Ce pleca
+   * pe Telegram rămânea acolo — într-un serviciu străin, pe telefoanele
+   * tuturor din grup, fără ştergere când clientul o cere.
+   *
+   * Actele rămân la noi, într-un singur loc, aşa cum scrie şi la controlerul
+   * care le dă mai departe.
+   */
   async sendApplication(
     application: ApplicationInfo,
     partnerTelegram?: PartnerTelegram,
-    attachments: FileAttachment[] = [],
   ): Promise<string | null> {
     const cfg = this.resolveConfig(partnerTelegram);
     if (!cfg) return null;
@@ -265,17 +270,7 @@ export class TelegramService implements OnApplicationBootstrap {
         parse_mode: 'HTML',
       });
 
-      // 2. Trimite pozele / documentele
-      for (const att of attachments) {
-        if (!fs.existsSync(att.path)) continue;
-        try {
-          await cfg.bot.sendDocument(cfg.chatId, fs.createReadStream(att.path), { caption: att.label });
-        } catch (photoErr: any) {
-          this.logger.warn(`Photo send failed (${att.label}): ${photoErr.message}`);
-        }
-      }
-
-      // 3. Trimite mesajul de acțiuni cu butoanele — DUPĂ poze
+      // 2. Mesajul de acţiuni, cu butoanele
       const keyboard = this.buildKeyboard('PENDING', application.applicationId);
       const actionMsg = await cfg.bot.sendMessage(
         cfg.chatId,

@@ -68,20 +68,11 @@ export class ApplicationsService {
       selfie:  'SELFIE',
     };
 
-    const docLabelMap: Record<string, string> = {
-      idFront: '📋 Buletin de Identitate (față)',
-      idBack:  '📋 Buletin de Identitate (verso)',
-      selfie:  '📎 Alte acte',
-    };
-
-    const savedFiles: { path: string; label: string }[] = [];
+    // Actele se salvează la noi şi rămân aici. Pe Telegram nu mai pleacă: AIONA
+    // le cere direct, prin `GET /partener/applications/:id/documents`.
     for (const [field, fieldFiles] of Object.entries(files ?? {})) {
       for (const file of fieldFiles) {
-        const doc = await this.documents.saveFile(file, application.id, docTypeMap[field] ?? 'OTHER');
-        savedFiles.push({
-          path:  this.documents.getAbsolutePath(doc.path),
-          label: docLabelMap[field] ?? '📎 Document',
-        });
+        await this.documents.saveFile(file, application.id, docTypeMap[field] ?? 'OTHER');
       }
     }
 
@@ -102,7 +93,6 @@ export class ApplicationsService {
         comments:        dto.comments    ?? null,
       },
       partnerTelegram,
-      savedFiles,
     );
 
     if (msgId) {
@@ -256,18 +246,6 @@ export class ApplicationsService {
     });
     void this.aiona.trimite(id);
 
-    const docLabelMap: Record<string, string> = {
-      ID_FRONT: '📋 Buletin de Identitate (față)',
-      ID_BACK:  '📋 Buletin de Identitate (verso)',
-      SELFIE:   '📎 Alte acte',
-      OTHER:    '📎 Document',
-    };
-
-    const attachments = application.documents.map((doc) => ({
-      path:  this.documents.getAbsolutePath(doc.path),
-      label: docLabelMap[doc.type] ?? '📎 Document',
-    }));
-
     const msgId = await this.telegram.sendApplication(
       {
         applicationId:   id,
@@ -287,7 +265,6 @@ export class ApplicationsService {
         chatId:  application.partner.telegramChatId   ?? undefined,
         enabled: application.partner.telegramEnabled,
       },
-      attachments,
     );
 
     if (msgId) {
