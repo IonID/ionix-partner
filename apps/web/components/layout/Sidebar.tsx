@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Calculator, FileText, Users,
-  Settings, LogOut, ChevronRight, Building2, Menu, X,
+  Settings, LogOut, ChevronRight, Building2, Menu, X, Database
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ const adminNav = [
   { href: '/applications',     icon: FileText,        label: 'Toate Cererile' },
   { href: '/admin/users',      icon: Users,           label: 'Parteneri'  },
   { href: '/admin/settings',   icon: Settings,        label: 'Setări Globale' },
+  { href: '/admin/backups',    icon: Database,        label: 'Copii de rezervă' },
 ];
 
 export function Sidebar() {

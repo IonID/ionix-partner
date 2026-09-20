@@ -3,7 +3,9 @@
 # ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+# `postgresql16-client` aduce `pg_dump`, de care are nevoie copia zilnică de
+# rezervă. Versiunea se potriveşte cu baza din compose (postgres:16-alpine).
+RUN apk add --no-cache libc6-compat openssl postgresql16-client
 
 # ─────────────────────────────────────────────────────────
 #  Stage 2: Dependencies

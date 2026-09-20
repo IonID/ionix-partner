@@ -13,6 +13,8 @@ import { AuditModule } from './audit/audit.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { AionaModule } from './aiona/aiona.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { BackupModule } from './backup/backup.module';
 
 @Module({
   imports: [
@@ -29,11 +31,15 @@ import { AionaModule } from './aiona/aiona.module';
       { name: 'long', ttl: 60000, limit: 200 },
     ]),
 
+    // Ceasul pentru copia zilnică de rezervă, la 03:00.
+    ScheduleModule.forRoot(),
+
     // ── Core ─────────────────────────────────────────────────────────
     PrismaModule,
 
     // ── Feature Modules ──────────────────────────────────────────────
     AuthModule,
+    BackupModule,
     UsersModule,
     CalculatorModule,
     ApplicationsModule,
