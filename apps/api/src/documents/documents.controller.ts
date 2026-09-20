@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
+import { dispozitieFisier } from '../common/util/nume-fisier';
 
 @ApiTags('Documents')
 @ApiBearerAuth()
@@ -46,7 +47,9 @@ export class DocumentsController {
 
     res.set({
       'Content-Type': doc.mimeType,
-      'Content-Disposition': `inline; filename="${doc.originalName}"`,
+      // Numele vine de la partener, cum l-a pus el pe telefon. Un „Buletin
+      // Ştefan.jpg" arunca ERR_INVALID_CHAR şi ieşea 500, fără urmă în jurnal.
+      'Content-Disposition': dispozitieFisier(doc.originalName, 'inline'),
       'Cache-Control': 'private, max-age=3600',
     });
     res.sendFile(path.resolve(filePath));
