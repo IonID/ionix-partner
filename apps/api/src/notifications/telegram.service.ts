@@ -322,6 +322,58 @@ export class TelegramService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Contractul tipărit acum câteva zile, nici semnat, nici refuzat.
+   *
+   * AIONA ne cere anunţul după trei zile. Până pe 28.09.2026 îl primeau doar
+   * administratorul şi operatorul AIONA — adică exact cei care nu pot face
+   * nimic: semnat/refuzat marchează managerul partenerului care a depus
+   * cererea. Managerii n-au Telegram personal la noi, aşa că mesajul merge în
+   * grupul partenerului, cu numele lui şi ca răspuns la cardul cererii, ca
+   * să-l recunoască între celelalte.
+   */
+  async sendContractReminder(applicationId: string, zile: number): Promise<boolean> {
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      include: { partner: true, createdByUser: { select: { firstName: true, lastName: true } } },
+    });
+    if (!app?.partner) return false;
+    const cfg = this.resolveConfig({
+      token: app.partner.telegramBotToken ?? undefined,
+      chatId: app.partner.telegramChatId ?? undefined,
+      enabled: app.partner.telegramEnabled,
+    });
+    if (!cfg) return false;
+
+    const autor = app.createdByUser
+      ? `${app.createdByUser.firstName} ${app.createdByUser.lastName}`.trim()
+      : '';
+    const text = [
+      '⏳ <b>CONTRACT FĂRĂ RĂSPUNS</b>',
+      '',
+      `• <b>Client:</b> <code>${this.esc(app.clientFirstName)} ${this.esc(app.clientLastName)}</code>`,
+      ...(autor ? [`• <b>Depusă de:</b> ${this.esc(autor)}`] : []),
+      '',
+      `Contractul e trimis de ${zile} zile şi n-a fost marcat nici semnat, nici refuzat.`,
+      'Marchează în Ionix, pe fişa cererii, ce s-a întâmplat cu el.',
+    ].join('\n');
+
+    const reply = app.telegramMessageId ? { reply_to_message_id: Number(app.telegramMessageId) } : {};
+    try {
+      await cfg.bot.sendMessage(cfg.chatId, text, { parse_mode: 'HTML', ...reply });
+      return true;
+    } catch {
+      // Cardul poate fi şters din grup — atunci fără reply.
+      try {
+        await cfg.bot.sendMessage(cfg.chatId, text, { parse_mode: 'HTML' });
+        return true;
+      } catch (e: any) {
+        this.logger.warn(`Anunţul de contract fără răspuns n-a plecat: ${e?.message ?? e}`);
+        return false;
+      }
+    }
+  }
+
   async sendStatusUpdate(
     applicationId: string,
     status: string,
