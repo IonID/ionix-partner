@@ -117,6 +117,26 @@ export class AionaContractController {
     return { ok: true };
   }
 
+  /**
+   * Contractul a rămas fără răspuns — AIONA ne cere să-l anunţăm pe cel care
+   * a depus cererea. Vezi `TelegramService.sendContractReminder`.
+   */
+  @Post(':id/contract-reminder')
+  async amintesteContractul(
+    @Param('id') id: string,
+    @Body() body: { zile?: number },
+    @Headers('x-ionix-secret') secret?: string,
+  ) {
+    this.verificaSecretul(secret);
+    const app = await this.prisma.application.findUnique({ where: { id }, select: { contractOutcome: true } });
+    if (!app) throw new NotFoundException('Cererea nu există.');
+    // Marcat între timp la noi, dar încă nu ajuns în AIONA: nu-l mai deranjăm.
+    if (app.contractOutcome) return { ok: true, trimis: false };
+    const zile = Math.max(1, Math.floor(Number(body?.zile) || 3));
+    const trimis = await this.telegram.sendContractReminder(id, zile);
+    return { ok: true, trimis };
+  }
+
   @Post(':id/contract')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async primesteContract(
