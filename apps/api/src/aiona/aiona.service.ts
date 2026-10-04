@@ -152,6 +152,14 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private posteaza(url: string, secret: string, corp: Record<string, unknown>) {
+    return fetch(`${url}/api/v1/partener/applications`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ionix-secret': secret },
+      body: JSON.stringify(corp),
+    });
+  }
+
   private get config() {
     const url = (process.env.AIONA_API_URL ?? '').replace(/\/+$/, '');
     const secret = (process.env.IONIX_SECRET ?? '').trim();
@@ -166,40 +174,65 @@ export class AionaService implements OnModuleInit, OnModuleDestroy {
     try {
       const a = await this.prisma.application.findUnique({
         where: { id: applicationId },
-        include: { partner: { select: { companyName: true } } },
+        include: {
+          partner: { select: { companyName: true } },
+          extraPersons: { orderBy: { createdAt: 'asc' } },
+        },
       });
       if (!a) return;
 
-      const r = await fetch(`${url}/api/v1/partener/applications`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-ionix-secret': secret },
-        body: JSON.stringify({
-          externalId: a.id,
-          partnerName: a.partner?.companyName ?? 'Partener',
-          firstName: a.clientFirstName,
-          lastName: a.clientLastName,
-          phone: a.clientPhone,
-          email: a.clientEmail ?? undefined,
-          address: a.clientAddress ?? undefined,
-          // Coloana `clientIdnp` ţine denumirea produsului, nu un cod personal.
-          // O trimitem sub numele ei adevărat, ca să nu ducem confuzia mai departe.
-          productName: a.clientIdnp ?? undefined,
-          creditType: a.creditType,
-          amount: Number(a.amount),
-          months: a.months,
-          vtp: Number(a.totalAmount),
-          dae: Number(a.dae),
-          commissionAmount: Number(a.commissionAmount),
-          status: a.status,
-          comments: a.comments ?? undefined,
-          statusChangedByName: a.statusChangedByName ?? undefined,
-          // Porecla de Telegram a operatorului. AIONA o foloseşte ca să
-          // găsească utilizatorul ei şi să arate numele adevărat, nu porecla.
-          statusChangedByTelegram: a.statusChangedByTelegramUsername ?? undefined,
-          contractOutcome: a.contractOutcome ?? undefined,
-          contractOutcomeAt: a.contractOutcomeAt ? a.contractOutcomeAt.toISOString() : undefined,
-        }),
-      });
+      const corp: Record<string, unknown> = {
+        externalId: a.id,
+        partnerName: a.partner?.companyName ?? 'Partener',
+        firstName: a.clientFirstName,
+        lastName: a.clientLastName,
+        phone: a.clientPhone,
+        email: a.clientEmail ?? undefined,
+        address: a.clientAddress ?? undefined,
+        // Coloana `clientIdnp` ţine denumirea produsului, nu un cod personal.
+        // O trimitem sub numele ei adevărat, ca să nu ducem confuzia mai departe.
+        productName: a.clientIdnp ?? undefined,
+        creditType: a.creditType,
+        amount: Number(a.amount),
+        months: a.months,
+        vtp: Number(a.totalAmount),
+        dae: Number(a.dae),
+        commissionAmount: Number(a.commissionAmount),
+        status: a.status,
+        comments: a.comments ?? undefined,
+        statusChangedByName: a.statusChangedByName ?? undefined,
+        // Porecla de Telegram a operatorului. AIONA o foloseşte ca să
+        // găsească utilizatorul ei şi să arate numele adevărat, nu porecla.
+        statusChangedByTelegram: a.statusChangedByTelegramUsername ?? undefined,
+        contractOutcome: a.contractOutcome ?? undefined,
+        contractOutcomeAt: a.contractOutcomeAt ? a.contractOutcomeAt.toISOString() : undefined,
+        // Fidejusorii şi codebitorii: doar cine sunt şi telefonul. Buletinul
+        // lor îl cere AIONA, ca pe al clientului, prin ruta de acte.
+        // Lista pleacă mereu, şi goală, ca o persoană scoasă să dispară şi acolo.
+        persons: a.extraPersons.map((p) => ({
+          id: p.id,
+          role: p.role,
+          firstName: p.firstName ?? undefined,
+          lastName: p.lastName ?? undefined,
+          phone: p.phone,
+          createdByName: p.createdByName ?? undefined,
+          createdAt: p.createdAt.toISOString(),
+        })),
+      };
+
+      let r = await this.posteaza(url, secret, corp);
+
+      // AIONA respinge câmpurile pe care nu le cunoaşte. Dacă rulează încă o
+      // versiune fără fidejusori, o cerere cu `persons` ar fi respinsă întreagă
+      // şi nici statusul n-ar mai ajunge. Retrimitem fără ele: cererea merge,
+      // persoanele ajung după ce AIONA e actualizată.
+      if (r.status === 400) {
+        const text = await r.clone().text().catch(() => '');
+        if (text.includes('persons')) {
+          const { persons: _, ...faraPersoane } = corp;
+          r = await this.posteaza(url, secret, faraPersoane);
+        }
+      }
 
       if (!r.ok) {
         const text = await r.text().catch(() => '');

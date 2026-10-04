@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +8,7 @@ import {
   ArrowLeft, User, Phone, CreditCard,
   FileText, CheckCircle, Clock, XCircle, Download,
   ExternalLink, Loader2, AlertTriangle, ImageIcon, ShoppingBag, RotateCcw,
-  PenLine, Send,
+  PenLine, Send, UserPlus, Trash2, Users, Upload,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
@@ -127,6 +127,224 @@ function DocThumb({ doc }: { doc: any }) {
       </div>
       <ExternalLink className="absolute top-2 right-2 w-3 h-3 text-white/25" />
     </motion.button>
+  );
+}
+
+// ── Fidejusor / codebitor ─────────────────────────────────────────
+const roleLabel: Record<string, string> = {
+  GUARANTOR: 'Fidejusor',
+  CODEBTOR:  'Codebitor',
+};
+
+/** Statusurile în care partenerul mai poate adăuga pe cineva (ca în API). */
+const EXTRA_PERSON_STATUSES: AppStatus[] = ['PENDING', 'PROCESSING', 'APPROVED'];
+
+function PhotoPick({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file || !file.type.startsWith('image/')) { setPreview(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return (
+    <button
+      type="button"
+      onClick={() => ref.current?.click()}
+      className="relative flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-white/15 bg-white/3 hover:border-brand-500/40 hover:bg-brand-500/5 transition-all p-3 min-h-[96px] w-full"
+    >
+      <input ref={ref} type="file" accept="image/*,.pdf" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); e.currentTarget.value = ''; }} />
+      {preview ? (
+        <img src={preview} alt={label} className="max-h-20 rounded-lg object-cover" />
+      ) : file ? (
+        <FileText className="w-6 h-6 text-brand-400" />
+      ) : (
+        <Upload className="w-6 h-6 text-white/25" />
+      )}
+      <span className="text-[11px] text-white/50 text-center truncate max-w-full">{file ? file.name : label}</span>
+    </button>
+  );
+}
+
+/**
+ * Fidejusorul sau codebitorul, adăugat pe cererea deja depusă.
+ *
+ * Analiza din AIONA cere uneori o a doua persoană. Până acum actele ei veneau
+ * pe alte căi, în afara cererii; acum partenerul le pune aici — buletinul şi
+ * telefonul ajung — iar specialistul care analizează cererea e anunţat.
+ */
+function ExtraPersonsPanel({ app, canEdit }: { app: any; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const persons: any[] = app.extraPersons ?? [];
+
+  const [open, setOpen] = useState(false);
+  const [role, setRole] = useState<'GUARANTOR' | 'CODEBTOR'>('GUARANTOR');
+  const [phone, setPhone] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [idFront, setIdFront] = useState<File | null>(null);
+  const [idBack, setIdBack] = useState<File | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  const reset = () => {
+    setOpen(false); setRole('GUARANTOR'); setPhone(''); setFirstName(''); setLastName('');
+    setIdFront(null); setIdBack(null);
+  };
+
+  const { mutate: add, isPending: adding } = useMutation({
+    mutationFn: () => {
+      const fd = new FormData();
+      fd.append('role', role);
+      fd.append('phone', phone.trim());
+      if (firstName.trim()) fd.append('firstName', firstName.trim());
+      if (lastName.trim()) fd.append('lastName', lastName.trim());
+      if (idFront) fd.append('idFront', idFront);
+      if (idBack) fd.append('idBack', idBack);
+      return api.post(`/applications/${app.id}/persons`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    onSuccess: () => {
+      toast({ title: `${roleLabel[role]} adăugat`, description: 'Actele au plecat la specialistul care analizează cererea.' });
+      reset();
+      qc.invalidateQueries({ queryKey: ['application', app.id] });
+    },
+    onError: (err: any) => {
+      const m = err?.response?.data?.message;
+      toast({ title: 'Eroare', description: Array.isArray(m) ? m.join(', ') : m ?? 'Nu s-a putut adăuga', variant: 'destructive' });
+    },
+  });
+
+  const { mutate: remove, isPending: removing } = useMutation({
+    mutationFn: (personId: string) => api.delete(`/applications/${app.id}/persons/${personId}`),
+    onSuccess: () => {
+      toast({ title: 'Persoană scoasă', description: 'Actele ei au fost şterse.' });
+      setConfirmRemove(null);
+      qc.invalidateQueries({ queryKey: ['application', app.id] });
+    },
+    onError: (err: any) =>
+      toast({ title: 'Eroare', description: err?.response?.data?.message ?? 'Nu s-a putut scoate', variant: 'destructive' }),
+  });
+
+  if (!persons.length && !canEdit) return null;
+
+  const phoneOk = phone.replace(/\D/g, '').length >= 8;
+  const canSubmit = phoneOk && !!idFront && !adding;
+
+  return (
+    <motion.div className="glass-card p-5 space-y-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold text-white/50 uppercase tracking-wider flex items-center gap-2">
+          <Users className="w-3.5 h-3.5 text-brand-400" /> Fidejusor / Codebitor
+        </h2>
+        {canEdit && !open && (
+          <button onClick={() => setOpen(true)} className="btn-ghost text-xs py-1.5 px-3 border border-brand-400/30 text-brand-300 hover:bg-brand-500/10">
+            <UserPlus className="w-3.5 h-3.5" /> Adaugă
+          </button>
+        )}
+      </div>
+
+      {persons.length === 0 && !open && (
+        <p className="text-sm text-white/40">
+          Dacă specialistul cere un fidejusor sau un codebitor, adaugă-l aici: buletinul şi telefonul ajung.
+        </p>
+      )}
+
+      {persons.map((p) => (
+        <div key={p.id} className="rounded-xl border border-white/10 bg-white/3 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="badge badge-blue px-2 py-0.5 text-[10px]">{roleLabel[p.role] ?? p.role}</span>
+              <p className="text-sm text-white/85 mt-1.5">
+                {[p.lastName, p.firstName].filter(Boolean).join(' ') || 'Nume din buletin'}
+              </p>
+              <p className="text-xs text-white/50 flex items-center gap-1.5 mt-0.5">
+                <Phone className="w-3 h-3" /> {p.phone}
+              </p>
+              <p className="text-[10px] text-white/30 mt-1">
+                Adăugat {p.createdByName ? `de ${p.createdByName} · ` : ''}{formatDate(p.createdAt)}
+              </p>
+            </div>
+            {canEdit && (
+              confirmRemove === p.id ? (
+                <div className="flex gap-1.5">
+                  <button onClick={() => remove(p.id)} disabled={removing}
+                    className="btn-ghost text-xs py-1 px-2.5 border border-red-500/40 text-red-400 hover:bg-red-500/15">
+                    {removing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Da, scoate'}
+                  </button>
+                  <button onClick={() => setConfirmRemove(null)} className="btn-ghost text-xs py-1 px-2.5">Nu</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmRemove(p.id)} title="Scoate persoana"
+                  className="btn-ghost p-1.5 text-white/35 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )
+            )}
+          </div>
+          {p.documents?.length > 0 ? (
+            <div className="grid grid-cols-3 gap-3">
+              {p.documents.map((doc: any) => <DocThumb key={doc.id} doc={doc} />)}
+            </div>
+          ) : (
+            <p className="text-[11px] text-white/30">Actele s-au şters după cele 5 zile de păstrare.</p>
+          )}
+        </div>
+      ))}
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="rounded-xl border border-brand-400/25 bg-brand-500/5 p-4 space-y-3"
+          >
+            <div className="flex gap-2">
+              {(['GUARANTOR', 'CODEBTOR'] as const).map((r) => (
+                <button key={r} type="button" onClick={() => setRole(r)}
+                  className={`flex-1 text-xs py-2 rounded-lg border font-medium transition-all ${role === r
+                    ? 'border-brand-400/60 bg-brand-500/15 text-brand-300'
+                    : 'border-white/12 text-white/50 hover:bg-white/5'}`}>
+                  {roleLabel[r]}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-white/50">Telefon *</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel"
+                placeholder="+373 6X XXX XXX" className="ionix-input text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs text-white/50">Prenume</label>
+                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="ionix-input text-sm" placeholder="opţional" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-white/50">Nume</label>
+                <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="ionix-input text-sm" placeholder="opţional" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <PhotoPick label="Față buletin *" file={idFront} onChange={setIdFront} />
+              <PhotoPick label="Verso buletin" file={idBack} onChange={setIdBack} />
+            </div>
+            <p className="text-[10px] text-white/30">JPEG, PNG sau PDF, cel mult 10 MB per fişier.</p>
+
+            <div className="flex gap-2">
+              <button onClick={() => add()} disabled={!canSubmit} className="btn-primary py-2 px-4 text-xs disabled:opacity-50">
+                {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                Trimite
+              </button>
+              <button onClick={reset} disabled={adding} className="btn-ghost py-2 px-3 text-xs">Renunță</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -416,6 +634,11 @@ export default function ApplicationDetailPage() {
     isAdmin || isPartnerAdmin || isManager
   ));
 
+  // Fidejusor / codebitor: orice utilizator al partenerului, cât cererea e în lucru
+  const canEditPersons = !!(app && EXTRA_PERSON_STATUSES.includes(app.status) && !app.contractOutcome && (
+    isAdmin || isPartnerAdmin || isManager
+  ));
+
   const [confirmResubmit, setConfirmResubmit] = useState(false);
 
   const { mutate: cancelApp, isPending: cancelling } = useMutation({
@@ -651,18 +874,21 @@ export default function ApplicationDetailPage() {
           </motion.div>
 
           {/* Documents */}
-          {app.documents?.filter((d: any) => d.type !== 'CONTRACT').length > 0 && (
+          {app.documents?.filter((d: any) => d.type !== 'CONTRACT' && !d.personId).length > 0 && (
             <motion.div className="glass-card p-5" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <h2 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <FileText className="w-3.5 h-3.5 text-brand-400" /> Documente Încărcate
               </h2>
               <div className="grid grid-cols-3 gap-3">
-                {app.documents.filter((d: any) => d.type !== 'CONTRACT').map((doc: any) => (
+                {app.documents.filter((d: any) => d.type !== 'CONTRACT' && !d.personId).map((doc: any) => (
                   <DocThumb key={doc.id} doc={doc} />
                 ))}
               </div>
             </motion.div>
           )}
+
+          {/* Fidejusor / codebitor — sub actele clientului, ca în AIONA */}
+          <ExtraPersonsPanel app={app} canEdit={canEditPersons} />
 
           {/* Processor notes (read-only for partner) */}
           {app.processorNotes && user?.role !== 'ADMIN' && (

@@ -28,11 +28,14 @@ export class DocumentsService {
     this.ensureUploadDir();
   }
 
-  async saveFile(
-    file: Express.Multer.File,
-    applicationId: string,
-    docType: DocumentType,
-  ) {
+  /**
+   * Verifică fişierul fără să-l salveze.
+   *
+   * La fidejusor se cheamă înainte de a crea persoana: altfel un PDF prea mare
+   * lăsa în urmă o persoană fără buletin, pe care partenerul o vedea şi nu
+   * înţelegea de unde a apărut.
+   */
+  validate(file: Express.Multer.File) {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException(
         `Tip de fișier neacceptat: ${file.mimetype}. Acceptat: JPEG, PNG, WEBP, PDF`,
@@ -42,6 +45,15 @@ export class DocumentsService {
     if (file.size > MAX_SIZE) {
       throw new BadRequestException('Fișierul depășește limita de 10 MB');
     }
+  }
+
+  async saveFile(
+    file: Express.Multer.File,
+    applicationId: string,
+    docType: DocumentType,
+    personId?: string,
+  ) {
+    this.validate(file);
 
     // Extensia derivată din MIME type validat, nu din originalname (previne .php etc.)
     const ext = MIME_TO_EXT[file.mimetype];
@@ -57,6 +69,7 @@ export class DocumentsService {
     return this.prisma.document.create({
       data: {
         applicationId,
+        personId: personId ?? null,
         type: docType,
         filename: storedName,
         originalName: file.originalname,
@@ -101,6 +114,16 @@ export class DocumentsService {
       }
     }
     await this.prisma.document.deleteMany({ where: { applicationId } });
+  }
+
+  /** Actele unei persoane adăugate (fidejusor, codebitor), cu tot cu fişiere. */
+  async deleteByPerson(personId: string) {
+    const docs = await this.prisma.document.findMany({ where: { personId } });
+    for (const doc of docs) {
+      const fullPath = this.getAbsolutePath(doc.path);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    }
+    await this.prisma.document.deleteMany({ where: { personId } });
   }
 
   private ensureUploadDir() {

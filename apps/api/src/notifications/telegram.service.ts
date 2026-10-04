@@ -322,6 +322,53 @@ export class TelegramService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Fidejusor sau codebitor adăugat pe cerere.
+   *
+   * Răspuns la mesajul cererii, ca operatorul care a luat-o din grup să vadă
+   * unde s-a schimbat ceva. Fără buletin şi fără telefon: actele rămân în Ionix,
+   * iar specialistul le vede în AIONA, sub buletinul clientului.
+   */
+  async sendExtraPersonAdded(
+    applicationId: string,
+    role: 'GUARANTOR' | 'CODEBTOR',
+    byName: string | null,
+    partnerTelegram?: PartnerTelegram,
+  ): Promise<void> {
+    const cfg = this.resolveConfig(partnerTelegram);
+    if (!cfg) return;
+
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { clientFirstName: true, clientLastName: true, telegramMessageId: true },
+    });
+    if (!app) return;
+
+    const rol = role === 'GUARANTOR' ? 'FIDEJUSOR' : 'CODEBITOR';
+    const text = [
+      `➕ <b>${rol} ADĂUGAT</b>`,
+      '',
+      `• <b>Client:</b> <code>${this.esc(app.clientFirstName)} ${this.esc(app.clientLastName)}</code>`,
+      ...(byName ? [`• <b>De:</b> ${this.esc(byName)}`] : []),
+      '',
+      'Buletinul şi telefonul sunt în AIONA, pe fişa cererii.',
+    ].join('\n');
+
+    try {
+      await cfg.bot.sendMessage(cfg.chatId, text, {
+        parse_mode: 'HTML',
+        ...(app.telegramMessageId ? { reply_to_message_id: Number(app.telegramMessageId) } : {}),
+      });
+    } catch {
+      // Mesajul cererii poate fi şters din grup; anunţul pleacă atunci fără reply.
+      try {
+        await cfg.bot.sendMessage(cfg.chatId, text, { parse_mode: 'HTML' });
+      } catch (e: any) {
+        this.logger.warn(`Anunţul de fidejusor n-a plecat: ${e?.message ?? e}`);
+      }
+    }
+  }
+
   async sendStatusUpdate(
     applicationId: string,
     status: string,

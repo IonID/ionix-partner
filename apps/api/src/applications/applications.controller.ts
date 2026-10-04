@@ -10,6 +10,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagg
 import { Role } from '@prisma/client';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { AddExtraPersonDto } from './dto/add-extra-person.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -136,6 +137,65 @@ export class ApplicationsController {
       metadata: { creditType: dto.creditType, amount: dto.amount },
     });
 
+    return result;
+  }
+
+  @Post(':id/persons')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.PARTNER, 'PARTNER_ADMIN' as any, 'MANAGER' as any)
+  @ApiOperation({ summary: '[PARTNER/MANAGER] Adaugă fidejusor sau codebitor: buletin + telefon' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'idFront', maxCount: 1 },
+        { name: 'idBack', maxCount: 1 },
+      ],
+      { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } },
+    ),
+  )
+  async addPerson(
+    @Param('id') id: string,
+    @Body() dto: AddExtraPersonDto,
+    @UploadedFiles() files: { idFront?: Express.Multer.File[]; idBack?: Express.Multer.File[] },
+    @CurrentUser() user: any,
+    @Req() req: Request,
+  ) {
+    const result = await this.applicationsService.addExtraPerson(id, dto, files, user);
+    const ip = (req.headers['x-forwarded-for'] as string) || (req as any).ip || 'unknown';
+    await this.auditService.log({
+      userId: user.id,
+      action: 'ADD_EXTRA_PERSON',
+      resource: 'application',
+      resourceId: id,
+      ipAddress: ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { role: dto.role },
+    });
+    return result;
+  }
+
+  @Delete(':id/persons/:personId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.PARTNER, 'PARTNER_ADMIN' as any, 'MANAGER' as any)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[PARTNER/MANAGER] Scoate un fidejusor sau codebitor adăugat din greşeală' })
+  async removePerson(
+    @Param('id') id: string,
+    @Param('personId') personId: string,
+    @CurrentUser() user: any,
+    @Req() req: Request,
+  ) {
+    const result = await this.applicationsService.removeExtraPerson(id, personId, user);
+    const ip = (req.headers['x-forwarded-for'] as string) || (req as any).ip || 'unknown';
+    await this.auditService.log({
+      userId: user.id,
+      action: 'REMOVE_EXTRA_PERSON',
+      resource: 'application',
+      resourceId: id,
+      ipAddress: ip,
+      metadata: { personId },
+    });
     return result;
   }
 
