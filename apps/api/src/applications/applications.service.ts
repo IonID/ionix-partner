@@ -6,7 +6,18 @@ import { DocumentsService } from '../documents/documents.service';
 import { TelegramService } from '../notifications/telegram.service';
 import { AionaService } from '../aiona/aiona.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { AddExtraPersonDto } from './dto/add-extra-person.dto';
 import { DocumentType, Role } from '@prisma/client';
+
+/**
+ * Câte persoane suplimentare încap pe o cerere. Un fidejusor şi un codebitor
+ * sunt cazul obişnuit; patru lasă loc pentru o greşeală corectată fără să
+ * deschidă uşa unei liste fără capăt.
+ */
+const MAX_EXTRA_PERSONS = 4;
+
+/** Statusurile în care se mai poate adăuga cineva: cât cererea e încă vie. */
+const EXTRA_PERSON_STATUSES = ['PENDING', 'PROCESSING', 'APPROVED'];
 
 @Injectable()
 export class ApplicationsService {
@@ -202,6 +213,7 @@ export class ApplicationsService {
           },
         },
         documents:        true,
+        extraPersons:     { include: { documents: true }, orderBy: { createdAt: 'asc' } },
         createdByUser:    { select: { id: true, firstName: true, lastName: true, email: true, username: true, role: true } },
       },
     });
@@ -366,6 +378,112 @@ export class ApplicationsService {
     void this.aiona.trimite(id);
 
     return updated;
+  }
+
+  /**
+   * Fidejusorul sau codebitorul, adăugat pe o cerere deja depusă.
+   *
+   * Până pe 04.10.2026 cererea ducea doar buletinul clientului. Când analiza
+   * cerea un fidejusor sau un codebitor, actele lui veneau pe alte căi, în
+   * afara cererii, iar specialistul le căuta prin telefon. Acum partenerul le
+   * pune aici, iar AIONA le arată sub buletinul clientului şi îl anunţă pe cel
+   * care analizează cererea.
+   */
+  async addExtraPerson(
+    id: string,
+    dto: AddExtraPersonDto,
+    files: { idFront?: Express.Multer.File[]; idBack?: Express.Multer.File[] },
+    requestingUser: any,
+  ) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: {
+        partner: { select: { telegramBotToken: true, telegramChatId: true, telegramEnabled: true } },
+        _count: { select: { extraPersons: true } },
+      },
+    });
+    if (!application) throw new NotFoundException('Cererea nu a fost găsită');
+    await this.assertPartnerMember(application, requestingUser);
+
+    if (!EXTRA_PERSON_STATUSES.includes(application.status) || application.contractOutcome) {
+      throw new BadRequestException('Fidejusorul sau codebitorul se adaugă doar cât cererea e în lucru.');
+    }
+    if (application._count.extraPersons >= MAX_EXTRA_PERSONS) {
+      throw new BadRequestException(`O cerere poate avea cel mult ${MAX_EXTRA_PERSONS} persoane suplimentare.`);
+    }
+
+    const idFront = files?.idFront?.[0];
+    const idBack = files?.idBack?.[0];
+    if (!idFront) throw new BadRequestException('Încarcă faţa buletinului.');
+    // Verificate înainte de a crea persoana, ca un fişier respins să nu lase
+    // în urmă un fidejusor fără buletin.
+    this.documents.validate(idFront);
+    if (idBack) this.documents.validate(idBack);
+
+    const byName = `${requestingUser.firstName ?? ''} ${requestingUser.lastName ?? ''}`.trim() || null;
+    const person = await this.prisma.extraPerson.create({
+      data: {
+        applicationId: id,
+        role: dto.role,
+        phone: dto.phone.trim(),
+        firstName: dto.firstName?.trim() || null,
+        lastName: dto.lastName?.trim() || null,
+        createdByName: byName,
+      },
+    });
+
+    try {
+      await this.documents.saveFile(idFront, id, 'ID_FRONT', person.id);
+      if (idBack) await this.documents.saveFile(idBack, id, 'ID_BACK', person.id);
+    } catch (e) {
+      // Discul plin sau o eroare de scriere: fără buletin, persoana n-are rost.
+      await this.documents.deleteByPerson(person.id).catch(() => {});
+      await this.prisma.extraPerson.delete({ where: { id: person.id } }).catch(() => {});
+      throw e;
+    }
+
+    // Atingem cererea, ca măturarea de la zece minute s-o retrimită în AIONA
+    // dacă trimiterea de acum se pierde.
+    await this.prisma.application.update({ where: { id }, data: { updatedAt: new Date() } });
+    void this.aiona.trimite(id);
+
+    // Operatorul care a luat cererea din Telegram o vede şi acolo.
+    void this.telegram.sendExtraPersonAdded(id, dto.role, byName, {
+      token:   application.partner.telegramBotToken ?? undefined,
+      chatId:  application.partner.telegramChatId   ?? undefined,
+      enabled: application.partner.telegramEnabled,
+    });
+
+    return this.findOne(id, requestingUser);
+  }
+
+  /** Persoana adăugată din greşeală — cu tot cu actele ei. */
+  async removeExtraPerson(id: string, personId: string, requestingUser: any) {
+    const person = await this.prisma.extraPerson.findFirst({
+      where: { id: personId, applicationId: id },
+      include: { application: true },
+    });
+    if (!person) throw new NotFoundException('Persoana nu a fost găsită');
+    await this.assertPartnerMember(person.application, requestingUser);
+    if (!EXTRA_PERSON_STATUSES.includes(person.application.status) || person.application.contractOutcome) {
+      throw new BadRequestException('Cererea nu mai e în lucru; persoanele ei nu se mai schimbă.');
+    }
+
+    await this.documents.deleteByPerson(personId);
+    await this.prisma.extraPerson.delete({ where: { id: personId } });
+    await this.prisma.application.update({ where: { id }, data: { updatedAt: new Date() } });
+    void this.aiona.trimite(id);
+
+    return this.findOne(id, requestingUser);
+  }
+
+  /** Orice utilizator al partenerului care a depus cererea, sau Admin. */
+  private async assertPartnerMember(application: { partnerId: string }, requestingUser: any) {
+    if (requestingUser.role === Role.ADMIN) return;
+    const isMember = await this.prisma.user.findFirst({
+      where: { id: requestingUser.id, partnerId: application.partnerId },
+    });
+    if (!isMember) throw new ForbiddenException('Acces refuzat');
   }
 
   private async assertPartnerAccess(application: any, requestingUser: any, action: string) {

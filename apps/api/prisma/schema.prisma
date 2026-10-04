@@ -37,6 +37,12 @@ enum CreditType {
   CLASSIC // standard amortization
 }
 
+/// Rolul unei persoane adăugate la cerere pe lângă client.
+enum ExtraPersonRole {
+  GUARANTOR // fidejusor
+  CODEBTOR  // codebitor
+}
+
 enum DocumentType {
   ID_FRONT
   ID_BACK
@@ -175,6 +181,7 @@ model Application {
   contractOutcomeAt     DateTime?
 
   documents    Document[]
+  extraPersons ExtraPerson[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -182,6 +189,35 @@ model Application {
   @@index([status])
   @@index([createdAt])
   @@map("applications")
+}
+
+// ─────────────────────────────────────────────
+//  ExtraPerson (fidejusor / codebitor)
+// ─────────────────────────────────────────────
+
+/// Fidejusorul sau codebitorul cerut după depunere.
+///
+/// Partenerul trimitea doar buletinul clientului. Când analiza cerea un
+/// fidejusor sau un codebitor, actele lui veneau pe alte căi — Viber, telefon —
+/// în afara cererii. Acum se adaugă pe cererea existentă: buletin şi telefon,
+/// numele e opţional (se citeşte din buletin).
+model ExtraPerson {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  role          ExtraPersonRole
+  firstName     String?
+  lastName      String?
+  phone         String
+
+  createdByName String?
+  createdAt     DateTime        @default(now())
+
+  documents     Document[]
+
+  @@index([applicationId])
+  @@map("extra_persons")
 }
 
 // ─────────────────────────────────────────────
@@ -193,6 +229,10 @@ model Document {
   applicationId String
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
+  /// Gol la actele clientului; plin la ale fidejusorului sau codebitorului.
+  personId      String?
+  person        ExtraPerson? @relation(fields: [personId], references: [id], onDelete: Cascade)
+
   type          DocumentType @default(OTHER)
   filename      String       // stored filename (UUID-based)
   originalName  String       // original filename from client
@@ -203,6 +243,7 @@ model Document {
   createdAt     DateTime @default(now())
 
   @@index([applicationId])
+  @@index([personId])
   @@map("documents")
 }
 

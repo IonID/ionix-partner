@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Get, Headers, NotFoundException, Param, Post,
+  BadRequestException, Body, Controller, Get, Headers, NotFoundException, Param, Post, Query,
   UnauthorizedException, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import * as fs from 'fs';
@@ -44,11 +44,24 @@ export class AionaContractController {
     if ((secret ?? '').trim() !== asteptat) throw new UnauthorizedException('Secret invalid.');
   }
 
+  /**
+   * Actele fidejusorului şi ale codebitorului vin doar cu `?persoane=1`, fiecare
+   * cu `personId`. Fără parametru, lista rămâne doar a clientului: o AIONA încă
+   * neactualizată ar fi arătat buletinul fidejusorului drept al clientului.
+   */
   @Get(':id/documents')
-  async documente(@Param('id') id: string, @Headers('x-ionix-secret') secret?: string) {
+  async documente(
+    @Param('id') id: string,
+    @Headers('x-ionix-secret') secret?: string,
+    @Query('persoane') persoane?: string,
+  ) {
     this.verificaSecretul(secret);
     const docs = await this.prisma.document.findMany({
-      where: { applicationId: id, type: { in: ['ID_FRONT', 'ID_BACK', 'SELFIE', 'OTHER'] } },
+      where: {
+        applicationId: id,
+        type: { in: ['ID_FRONT', 'ID_BACK', 'SELFIE', 'OTHER'] },
+        ...(persoane === '1' ? {} : { personId: null }),
+      },
       orderBy: { type: 'asc' },
     });
     const iesire: any[] = [];
@@ -60,6 +73,7 @@ export class AionaContractController {
         // AIONA numeşte feţele buletinului FRONT/BACK; noi ID_FRONT/ID_BACK.
         kind: d.type === 'ID_FRONT' ? 'FRONT' : d.type === 'ID_BACK' ? 'BACK' : d.type,
         mimeType: d.mimeType,
+        personId: d.personId ?? undefined,
         data: fs.readFileSync(cale).toString('base64'),
         createdAt: d.createdAt,
       });
